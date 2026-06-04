@@ -1,0 +1,71 @@
+/* Quarity — design tokens. Source de vérité : docs/identity.md
+ * RÈGLE : ne jamais utiliser un token --aqi-* comme couleur d'UI générique,
+ * ni un token de marque pour signifier un niveau de pollution. */
+:root {
+  /* ===== PALETTE DE MARQUE ===== */
+  --brand-atmosphere: #0B3D5C;
+  --brand-sky:        #CFE8F5;
+  --brand-cyan:       #1FA8B8;
+  --brand-mint:       #3FB984;
+  --brand-mist:       #F4F8FA;
+  --brand-ink:        #13242E;
+
+  --brand-cyan-hover:   #1A8E9C;
+  --brand-cyan-press:   #157985;
+  --brand-atmosphere-2: #0E4A6E;
+  --brand-mint-soft:    #E4F5EE;
+  --brand-danger:       #C0392B;
+  --brand-danger-soft:  #FBEAE8;
+
+  /* ===== Rôles sémantiques (à utiliser dans les composants) ===== */
+  --c-bg:            var(--brand-mist);
+  --c-bg-elevated:   #FFFFFF;
+  --c-bg-sunken:     #E9F2F8;
+  --c-surface-dark:  var(--brand-atmosphere);
+
+  --c-border:        #D4E3EC;
+  --c-border-strong: #B7CEDD;
+
+  --c-text:          var(--brand-ink);
+  --c-text-muted:    #5A7383;
+  --c-text-invert:   var(--brand-mist);
+  --c-text-link:     #14808E;
+
+  --c-accent:        var(--brand-cyan);
+  --c-accent-hover:  var(--brand-cyan-hover);
+  --c-accent-press:  var(--brand-cyan-press);
+
+  --c-success:       #2F9E70;
+  --c-success-bg:    var(--brand-mint-soft);
+  --c-danger:        var(--brand-danger);
+  --c-danger-bg:     var(--brand-danger-soft);
+
+  --c-focus-ring:    var(--brand-cyan);
+
+  /* ===== ÉCHELLE AQI US EPA (séparée — usage réservé aux niveaux d'air) ===== */
+  --aqi-1: #00E400; --aqi-1-text: #0A2E0A;
+  --aqi-2: #FFFF00; --aqi-2-text: #3A3A00;
+  --aqi-3: #FF7E00; --aqi-3-text: #2E1500;
+  --aqi-4: #FF0000; --aqi-4-text: #FFFFFF;
+  --aqi-5: #8F3F97; --aqi-5-text: #FFFFFF;
+  --aqi-6: #7E0023; --aqi-6-text: #FFFFFF;
+
+  /* ===== TYPOGRAPHIE ===== */
+  --font-sans: 'Inter Variable', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
+
+  --fw-regular: 400; --fw-medium: 500; --fw-bold: 700;
+  --fs-xs: 0.75rem; --fs-sm: 0.875rem; --fs-base: 1rem;
+  --fs-lg: 1.125rem; --fs-xl: 1.5rem; --fs-2xl: 2rem;
+  --lh-tight: 1.2; --lh-base: 1.5;
+
+  /* ===== ESPACEMENT / RAYONS / OMBRES ===== */
+  --sp-1: 0.25rem; --sp-2: 0.5rem; --sp-3: 0.75rem; --sp-4: 1rem;
+  --sp-5: 1.5rem; --sp-6: 2rem; --sp-8: 3rem;
+
+  --radius-sm: 4px; --radius-md: 8px; --radius-lg: 12px; --radius-pill: 999px;
+  --shadow-sm: 0 1px 2px rgba(19, 36, 46, 0.06);
+  --shadow-md: 0 2px 8px rgba(19, 36, 46, 0.08);
+  --ring-width: 3px;
+  --transition: 140ms ease;
+}

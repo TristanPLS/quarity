@@ -87,6 +87,7 @@ services:
   # --- Back Rust/Axum — auth JWT + lecture des mesures (walking skeleton) ---
   back:
     build: ./back
+    image: quarity-back:local
     container_name: quarity_back
     restart: unless-stopped
     environment:
@@ -107,8 +108,36 @@ services:
       clickhouse: { condition: service_healthy }
       redis: { condition: service_healthy }
 
-  # --- Front React/Vite (à activer quand le code existera) ---
-  # front:
+  # --- Ingestion OpenAQ (one-shot) — `docker compose --profile ingest run --rm ingest [location_id]` ---
+  # Nécessite OPENAQ_API_KEY dans .env. Insère les mesures dans ClickHouse + lie la station à l'org.
+  ingest:
+    build: ./back
+    image: quarity-back:local
+    profiles: ["ingest"]
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB}
+      OPENAQ_API_KEY: ${OPENAQ_API_KEY}
+      OPENAQ_LOCATION_ID: ${OPENAQ_LOCATION_ID:-4085}
+      OPENAQ_DAYS: ${OPENAQ_DAYS:-7}
+      OPENAQ_ORG_SLUG: ${OPENAQ_ORG_SLUG:-agglo-riviera}
+    entrypoint: ["quarity-ingest"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      clickhouse: { condition: service_healthy }
+
+  # --- Front React/Vite — login + série temporelle (nginx sert le statique + proxy /api -> back) ---
+  front:
+    build: ./front
+    container_name: quarity_front
+    restart: unless-stopped
+    ports:
+      - "${FRONT_PORT:-3000}:80"
+    depends_on:
+      - back
   #   build: ./front                      # Dockerfile React/Vite (à créer)
   #   container_name: quarity_front
   #   restart: unless-stopped

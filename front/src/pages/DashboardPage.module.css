@@ -1,0 +1,72 @@
+.app { min-height: 100vh; background: var(--c-bg); }
+
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: var(--sp-3) var(--sp-5);
+  background: var(--brand-atmosphere); color: var(--brand-mist);
+}
+.brand { display: flex; align-items: center; gap: var(--sp-3); }
+.logoRing {
+  width: 26px; height: 26px; border-radius: 50%;
+  border: 3px solid var(--brand-cyan); display: inline-block;
+}
+.brandName { font-weight: var(--fw-bold); font-size: var(--fs-lg); }
+.userBox { display: flex; align-items: center; gap: var(--sp-4); }
+.user { font-size: var(--fs-sm); color: var(--brand-sky); }
+.role { color: var(--brand-mist); font-weight: var(--fw-medium); }
+.userBox .ghost { color: var(--brand-mist); }
+
+.main { max-width: 1080px; margin: 0 auto; padding: var(--sp-6) var(--sp-5); }
+.head { margin-bottom: var(--sp-4); }
+.title { color: var(--brand-atmosphere); }
+.subtitle { color: var(--c-text-muted); font-size: var(--fs-sm); margin-top: var(--sp-1); }
+
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.unit { color: var(--c-text-muted); }
+
+.form {
+  display: grid; gap: var(--sp-4); grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  align-items: end; background: var(--c-bg-elevated); border: 1px solid var(--c-border);
+  border-radius: var(--radius-lg); padding: var(--sp-5); margin-block: var(--sp-4); box-shadow: var(--shadow-sm);
+}
+.field { display: flex; flex-direction: column; gap: var(--sp-2); }
+.field label { font-size: var(--fs-sm); font-weight: var(--fw-medium); color: var(--c-text); }
+.field input, .field select {
+  padding: var(--sp-3) var(--sp-4); border: 1px solid var(--c-border-strong);
+  border-radius: var(--radius-md); background: var(--c-bg-elevated); color: var(--c-text);
+}
+.field input:focus-visible, .field select:focus-visible {
+  outline: none; border-color: var(--c-accent); box-shadow: 0 0 0 var(--ring-width) rgba(31,168,184,0.25);
+}
+
+.summary { display: flex; flex-wrap: wrap; gap: var(--sp-6); margin-block: var(--sp-4); }
+.stat { display: flex; flex-direction: column; gap: 2px; }
+.statLabel { font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.04em; color: var(--c-text-muted); }
+.statValue { font-size: var(--fs-xl); }
+
+.chartCard { background: var(--c-bg-elevated); border: 1px solid var(--c-border); border-radius: var(--radius-lg); padding: var(--sp-4); margin: 0 0 var(--sp-5); box-shadow: var(--shadow-sm); }
+.chartCap { font-weight: var(--fw-medium); color: var(--brand-atmosphere); margin-bottom: var(--sp-3); }
+
+.tooltip { background: var(--brand-atmosphere); color: var(--brand-mist); padding: var(--sp-2) var(--sp-3); border-radius: var(--radius-md); font-size: var(--fs-sm); }
+.tooltipTime { color: var(--brand-sky); font-size: var(--fs-xs); margin-bottom: 2px; }
+.tooltipValue { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: var(--fw-bold); }
+
+.tableWrap { overflow-x: auto; border: 1px solid var(--c-border); border-radius: var(--radius-lg); }
+.table { width: 100%; border-collapse: collapse; background: var(--c-bg-elevated); }
+.table th, .table td { padding: var(--sp-3) var(--sp-4); text-align: left; border-bottom: 1px solid var(--c-border); font-size: var(--fs-sm); }
+.table thead th { background: var(--c-bg-sunken); color: var(--brand-atmosphere); position: sticky; top: 0; }
+.numCol { text-align: right; }
+
+.alertError {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3);
+  background: var(--c-danger-bg); color: var(--c-danger); border: 1px solid #F5C2C7;
+  border-radius: var(--radius-md); padding: var(--sp-4); margin-block: var(--sp-4);
+}
+.retry { background: var(--c-accent); color: #fff; border: none; border-radius: var(--radius-sm); padding: var(--sp-2) var(--sp-3); cursor: pointer; }
+.stateBox {
+  display: flex; align-items: center; justify-content: center; gap: var(--sp-3);
+  padding: var(--sp-8); text-align: center; color: var(--c-text-muted);
+  background: var(--c-bg-elevated); border: 1px dashed var(--c-border-strong); border-radius: var(--radius-lg); margin-block: var(--sp-4);
+}
+.spinner { width: 18px; height: 18px; border: 3px solid var(--c-border); border-top-color: var(--c-accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
