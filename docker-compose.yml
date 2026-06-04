@@ -84,22 +84,30 @@ services:
       retries: 5
       start_period: 10s
 
-  # ===========================================================================
-  # Services applicatifs — À ACTIVER au Jalon 2 quand le code existera.
-  # Le pattern depends_on/condition: service_healthy est déjà câblé.
-  # ===========================================================================
-  # back:
-  #   build: ./back                       # Dockerfile Rust/Axum (à créer)
-  #   container_name: quarity_back
-  #   restart: unless-stopped
-  #   env_file: .env
-  #   ports:
-  #     - "${BACK_PORT:-8080}:8080"
-  #   depends_on:
-  #     postgres:   { condition: service_healthy }
-  #     clickhouse: { condition: service_healthy }
-  #     redis:      { condition: service_healthy }
-  #
+  # --- Back Rust/Axum — auth JWT + lecture des mesures (walking skeleton) ---
+  back:
+    build: ./back
+    container_name: quarity_back
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ACCESS_TTL_SECONDS: ${JWT_ACCESS_TTL_SECONDS:-900}
+      BIND_ADDR: 0.0.0.0:8080
+      RUST_LOG: ${RUST_LOG:-info,sqlx=warn}
+    ports:
+      - "${BACK_PORT:-8080}:8080"
+    depends_on:
+      postgres: { condition: service_healthy }
+      clickhouse: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  # --- Front React/Vite (à activer quand le code existera) ---
   # front:
   #   build: ./front                      # Dockerfile React/Vite (à créer)
   #   container_name: quarity_front
