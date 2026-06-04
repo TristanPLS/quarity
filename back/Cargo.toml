@@ -25,6 +25,9 @@ redis = { version = "0.27", features = ["tokio-comp", "connection-manager"] }
 # --- ClickHouse via HTTP ---
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
+# --- Ingestion OpenAQ (binaire ingest) ---
+chrono = { version = "0.4", features = ["clock"] }
+
 # --- Auth / crypto ---
 argon2       = "0.5"
 jsonwebtoken = "9"

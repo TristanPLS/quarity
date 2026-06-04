@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Quarity">
+  <rect width="32" height="32" rx="7" fill="#0B3D5C"/>
+  <circle cx="15.5" cy="15.5" r="7.5" fill="none" stroke="#1FA8B8" stroke-width="2.6"/>
+  <line x1="20.2" y1="20.2" x2="24.5" y2="24.5" stroke="#1FA8B8" stroke-width="2.6" stroke-linecap="round"/>
+  <circle cx="15.5" cy="6" r="1.5" fill="#CFE8F5"/>
+  <circle cx="10.5" cy="7.6" r="1.2" fill="#CFE8F5" opacity="0.8"/>
+  <circle cx="20.5" cy="7.6" r="1.2" fill="#CFE8F5" opacity="0.8"/>
+</svg>

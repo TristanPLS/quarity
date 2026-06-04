@@ -1,0 +1,80 @@
+/* ===== Button ===== */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-5);
+  font-weight: var(--fw-medium); font-size: var(--fs-sm); line-height: 1;
+  border: 1px solid transparent; border-radius: var(--radius-md); cursor: pointer;
+  transition: background var(--transition), border-color var(--transition), color var(--transition);
+  white-space: nowrap;
+}
+.btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.full { width: 100%; }
+.primary { background: var(--c-accent); color: #fff; }
+.primary:hover:not(:disabled) { background: var(--c-accent-hover); }
+.primary:active:not(:disabled) { background: var(--c-accent-press); }
+.secondary { background: var(--brand-atmosphere); color: var(--brand-mist); }
+.secondary:hover:not(:disabled) { background: var(--brand-atmosphere-2); }
+.ghost { background: transparent; color: var(--c-text); border-color: var(--c-border-strong); }
+.ghost:hover:not(:disabled) { background: var(--c-bg-sunken); }
+.danger { background: var(--c-danger); color: #fff; }
+.danger:hover:not(:disabled) { filter: brightness(0.94); }
+.spinner {
+  width: 1em; height: 1em; border-radius: 50%;
+  border: 2px solid currentColor; border-top-color: transparent;
+  animation: spin 0.6s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ===== Card ===== */
+.card {
+  background: var(--c-bg-elevated); border: 1px solid var(--c-border);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); overflow: hidden;
+}
+.cardHeader {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-5); border-bottom: 1px solid var(--c-border);
+}
+.cardTitle { font-size: var(--fs-lg); font-weight: var(--fw-bold); }
+.cardActions { display: flex; gap: var(--sp-2); }
+.cardBody { padding: var(--sp-5); }
+
+/* ===== Input ===== */
+.field { display: flex; flex-direction: column; gap: var(--sp-2); }
+.label { font-size: var(--fs-sm); font-weight: var(--fw-medium); color: var(--c-text); }
+.input {
+  padding: var(--sp-3) var(--sp-4); background: var(--c-bg-elevated);
+  border: 1px solid var(--c-border-strong); border-radius: var(--radius-md);
+  color: var(--c-text); transition: border-color var(--transition), box-shadow var(--transition);
+}
+.input::placeholder { color: var(--c-text-muted); }
+.input:hover { border-color: var(--brand-atmosphere); }
+.input:focus-visible { outline: none; border-color: var(--c-accent); box-shadow: 0 0 0 var(--ring-width) rgba(31, 168, 184, 0.25); }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.invalid { border-color: var(--c-danger); }
+.hint { font-size: var(--fs-xs); color: var(--c-text-muted); }
+.errorText { font-size: var(--fs-xs); color: var(--c-danger); font-weight: var(--fw-medium); }
+
+/* ===== Badge ===== */
+.badge {
+  display: inline-flex; align-items: center; gap: var(--sp-2);
+  padding: 2px var(--sp-3); font-size: var(--fs-xs); font-weight: var(--fw-medium); line-height: 1.4;
+  border-radius: var(--radius-pill); border: 1px solid transparent;
+}
+.dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.neutral { background: var(--c-bg-sunken); color: var(--c-text-muted); border-color: var(--c-border); }
+.info { background: var(--brand-sky); color: var(--brand-atmosphere); }
+.success { background: var(--c-success-bg); color: var(--c-success); }
+
+/* ===== AqiBadge (couleurs EXCLUSIVEMENT --aqi-*) ===== */
+.aqi { display: inline-flex; align-items: baseline; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3); border-radius: var(--radius-sm); font-weight: var(--fw-medium); border: 1px solid rgba(0,0,0,0.12); }
+.aqiSm { padding: 1px var(--sp-2); font-size: var(--fs-xs); }
+.aqiMd { font-size: var(--fs-sm); }
+.aqiValue { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: var(--fw-bold); }
+.aqiUnit { font-size: 0.8em; margin-left: 2px; opacity: 0.85; }
+.aqiLabel { font-family: var(--font-sans); font-weight: var(--fw-medium); }
+.lvl1 { background: var(--aqi-1); color: var(--aqi-1-text); }
+.lvl2 { background: var(--aqi-2); color: var(--aqi-2-text); }
+.lvl3 { background: var(--aqi-3); color: var(--aqi-3-text); }
+.lvl4 { background: var(--aqi-4); color: var(--aqi-4-text); }
+.lvl5 { background: var(--aqi-5); color: var(--aqi-5-text); }
+.lvl6 { background: var(--aqi-6); color: var(--aqi-6-text); }

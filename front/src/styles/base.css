@@ -1,0 +1,55 @@
+/* Reset minimal (pas un reset de framework "tel quel") */
+*, *::before, *::after { box-sizing: border-box; }
+* { margin: 0; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  font-family: var(--font-sans);
+  font-size: var(--fs-base);
+  font-weight: var(--fw-regular);
+  line-height: var(--lh-base);
+  color: var(--c-text);
+  background: var(--c-bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-sans);
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-tight);
+  color: var(--c-text);
+}
+h1 { font-size: var(--fs-2xl); }
+h2 { font-size: var(--fs-xl); }
+h3 { font-size: var(--fs-lg); }
+
+a { color: var(--c-text-link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* Toute donnée chiffrée -> mono + tabular-nums */
+.q-num, code, kbd, samp {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+button, input, select, textarea { font: inherit; color: inherit; }
+img, svg { display: block; max-width: 100%; }
+
+:focus-visible {
+  outline: var(--ring-width) solid var(--c-focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}
