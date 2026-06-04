@@ -1,0 +1,115 @@
+name: quarity
+
+# =============================================================================
+# Quarity — Walking skeleton, socle bases de données (Jalon 2)
+# =============================================================================
+# `docker compose up -d` lève Postgres + ClickHouse + Redis, avec healthchecks,
+# volumes nommés (persistance) et AUTO-CHARGEMENT des schémas + seeds validés au
+# premier démarrage (répertoires /docker-entrypoint-initdb.d).
+#
+# Les services applicatifs back/front sont préparés (commentés en bas) et seront
+# activés quand leur code existera, avec `depends_on: condition: service_healthy`.
+#
+# Prérequis : `cp .env.example .env` puis renseigner les valeurs (aucun secret en dur ici).
+# =============================================================================
+
+services:
+
+  # --- PostgreSQL 16 — source de vérité OLTP métier ---
+  postgres:
+    image: postgres:16-alpine
+    container_name: quarity_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # init au 1er boot (ordre alphabétique : schéma puis seed)
+      - ./db/sql/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./db/sql/02_seed.sql:/docker-entrypoint-initdb.d/02_seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # --- ClickHouse 24.x — source de vérité analytics (mesures) ---
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8-alpine
+    container_name: quarity_clickhouse
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB}
+    ports:
+      - "${CLICKHOUSE_HTTP_PORT:-8123}:8123"     # interface HTTP
+      - "${CLICKHOUSE_NATIVE_PORT:-9000}:9000"   # protocole natif (driver)
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - ./db/clickhouse/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./db/clickhouse/02_seed.sql:/docker-entrypoint-initdb.d/02_seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client --user $$CLICKHOUSE_USER --password $$CLICKHOUSE_PASSWORD --query 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # --- Redis 7 — cache L2 + pub/sub (WebSocket) ---
+  redis:
+    image: redis:7-alpine
+    container_name: quarity_redis
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}   # exposé au conteneur pour que le healthcheck puisse l'utiliser
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a $$REDIS_PASSWORD ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ===========================================================================
+  # Services applicatifs — À ACTIVER au Jalon 2 quand le code existera.
+  # Le pattern depends_on/condition: service_healthy est déjà câblé.
+  # ===========================================================================
+  # back:
+  #   build: ./back                       # Dockerfile Rust/Axum (à créer)
+  #   container_name: quarity_back
+  #   restart: unless-stopped
+  #   env_file: .env
+  #   ports:
+  #     - "${BACK_PORT:-8080}:8080"
+  #   depends_on:
+  #     postgres:   { condition: service_healthy }
+  #     clickhouse: { condition: service_healthy }
+  #     redis:      { condition: service_healthy }
+  #
+  # front:
+  #   build: ./front                      # Dockerfile React/Vite (à créer)
+  #   container_name: quarity_front
+  #   restart: unless-stopped
+  #   ports:
+  #     - "${FRONT_PORT:-3000}:3000"
+  #   depends_on:
+  #     back: { condition: service_started }
+
+volumes:
+  pgdata:
+  clickhouse_data:
+  redis_data:
