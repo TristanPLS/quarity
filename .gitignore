@@ -1,0 +1,60 @@
+CLAUDE.md
+claude/
+
+.env
+.env.local
+.env.*.local
+*.env
+!.env.example
+
+target/
+**/*.rs.bk
+Cargo.lock.bak
+
+node_modules/
+dist/
+build/
+.vite/
+.turbo/
+.pnpm-store/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ====== OpenAQ ======
+data/
+*.csv
+*.csv.gz
+*.parquet
+*.ndjson
+!docs/**/*.csv          # autoriser de petits jeux d'exemple en doc
+
+# ====== Docker ======
+infra/volumes/
+pgdata/
+clickhouse_data/
+redis_data/
+
+# ====== Logs ======
+# Logs d'AGENTS = .md dans logs/ -> VERSIONNÉS (trace d'audit, voir AGENTS.md §6).
+# Logs runtime applicatifs = ignorés :
+*.log
+logs/**/*.log
+coverage/
+.nyc_output/
+tarpaulin-report.html
+
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+*.pid
+*.seed
+*.pid.lock
