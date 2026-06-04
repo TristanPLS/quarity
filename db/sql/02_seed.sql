@@ -146,14 +146,15 @@ INSERT INTO organizations (name, slug, segment) VALUES
     ('GroupeIndus SA','groupeindus',   'B2B'),
     ('CityAir App',   'cityair',       'B2B2C');
 
--- users (hash Argon2id factice valide vis-à-vis du CHECK)
+-- users — hash Argon2id RÉEL ; tous les comptes de démo ont le mot de passe : Quarity2026!
+-- (régénérable via : quarity-back hash '<motdepasse>')
 INSERT INTO users (email, password_hash, full_name) VALUES
-    ('sophie@agglo-riviera.fr', '$argon2id$v=19$m=65536,t=3,p=4$c29tZXNhbHQxMjM$ZGVtb2hhc2hfc29waWVfdmFsdWU', 'Sophie Marchand'),
-    ('karim@agglo-riviera.fr',  '$argon2id$v=19$m=65536,t=3,p=4$c29tZXNhbHQxMjQ$ZGVtb2hhc2hfa2FyaW1fdmFsdWU', 'Karim Benali'),
-    ('lecteur@agglo-riviera.fr','$argon2id$v=19$m=65536,t=3,p=4$c29tZXNhbHQxMjU$ZGVtb2hhc2hfbGVjdGV1cl9hZ2c', 'Lucie Lecteur'),
-    ('thomas@groupeindus.com',  '$argon2id$v=19$m=65536,t=3,p=4$c29tZXNhbHQxMjY$ZGVtb2hhc2hfdGhvbWFzX3ZhbA', 'Thomas Nguyen'),
-    ('audit@groupeindus.com',   '$argon2id$v=19$m=65536,t=3,p=4$c29tZXNhbHQxMjc$ZGVtb2hhc2hfYXVkaXRfdmFsdWU', 'Aude Auditeur'),
-    ('lea@cityair.app',         '$argon2id$v=19$m=65536,t=3,p=4$c29tZXNhbHQxMjg$ZGVtb2hhc2hfbGVhX3ZhbHVlcw', 'Léa Dubois');
+    ('sophie@agglo-riviera.fr', '$argon2id$v=19$m=19456,t=2,p=1$MTz7aIPtJvTueF+dakcuXQ$NprTF6h0zutVJ9u3MkycUPqZevDEbix+ip/zpgyqFBk', 'Sophie Marchand'),
+    ('karim@agglo-riviera.fr',  '$argon2id$v=19$m=19456,t=2,p=1$MTz7aIPtJvTueF+dakcuXQ$NprTF6h0zutVJ9u3MkycUPqZevDEbix+ip/zpgyqFBk', 'Karim Benali'),
+    ('lecteur@agglo-riviera.fr','$argon2id$v=19$m=19456,t=2,p=1$MTz7aIPtJvTueF+dakcuXQ$NprTF6h0zutVJ9u3MkycUPqZevDEbix+ip/zpgyqFBk', 'Lucie Lecteur'),
+    ('thomas@groupeindus.com',  '$argon2id$v=19$m=19456,t=2,p=1$MTz7aIPtJvTueF+dakcuXQ$NprTF6h0zutVJ9u3MkycUPqZevDEbix+ip/zpgyqFBk', 'Thomas Nguyen'),
+    ('audit@groupeindus.com',   '$argon2id$v=19$m=19456,t=2,p=1$MTz7aIPtJvTueF+dakcuXQ$NprTF6h0zutVJ9u3MkycUPqZevDEbix+ip/zpgyqFBk', 'Aude Auditeur'),
+    ('lea@cityair.app',         '$argon2id$v=19$m=19456,t=2,p=1$MTz7aIPtJvTueF+dakcuXQ$NprTF6h0zutVJ9u3MkycUPqZevDEbix+ip/zpgyqFBk', 'Léa Dubois');
 
 -- memberships (triplet user × org × role ; + 1 user multi-org pour prouver l'asso n-aire)
 INSERT INTO memberships (org_id, user_id, role_id)

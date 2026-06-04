@@ -1,0 +1,74 @@
+//! Quarity — back (walking skeleton).
+//! Bootstrap : tracing, config (env), connexions (Postgres/Redis/ClickHouse), routeur, serve + arrêt gracieux.
+
+mod ch;
+mod config;
+mod db;
+mod error;
+mod redis_store;
+mod routes;
+mod security;
+mod state;
+
+use anyhow::Context;
+use tracing_subscriber::EnvFilter;
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info,sqlx=warn,hyper=warn")),
+        )
+        .init();
+
+    // Helper hors-ligne : `quarity-back hash <password>` imprime un hash argon2id (pour le seed/démo).
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() >= 3 && args[1] == "hash" {
+        println!("{}", security::hash_password(&args[2])?);
+        return Ok(());
+    }
+
+    let cfg = config::Config::from_env()?;
+    tracing::info!(bind = %cfg.bind_addr, "démarrage quarity-back");
+
+    let state = state::AppState::connect(cfg.clone())
+        .await
+        .context("connexion aux dépendances (Postgres/Redis/ClickHouse)")?;
+
+    let app = routes::build_router(state);
+
+    let listener = tokio::net::TcpListener::bind(&cfg.bind_addr)
+        .await
+        .with_context(|| format!("bind {}", cfg.bind_addr))?;
+    tracing::info!("à l'écoute sur http://{}", cfg.bind_addr);
+
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await
+        .context("serveur HTTP")?;
+
+    Ok(())
+}
+
+/// Attend Ctrl-C ou SIGTERM (arrêt propre en conteneur).
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        tokio::signal::ctrl_c().await.expect("install Ctrl-C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("install SIGTERM handler")
+            .recv()
+            .await;
+    };
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
+    tracing::info!("signal d'arrêt reçu — arrêt gracieux");
+}
