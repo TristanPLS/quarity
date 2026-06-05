@@ -3,7 +3,7 @@
 > MCD/MLD du domaine métier (PostgreSQL 16) + schéma analytics (ClickHouse 24.x) + frontière inter-bases.
 > DDL exécutable : [`db/sql/01_schema.sql`](../db/sql/01_schema.sql) · [`db/sql/02_seed.sql`](../db/sql/02_seed.sql) ·
 > [`db/clickhouse/01_schema.sql`](../db/clickhouse/01_schema.sql) · [`db/clickhouse/02_seed.sql`](../db/clickhouse/02_seed.sql).
-> Sert les [user stories](user-stories.md) ; vocabulaire issu du [pitch](pitch.md) et de la [roadmap](../../roadmap.md).
+> Sert les [user stories](user-stories.md) ; vocabulaire issu du [pitch](pitch.md) et de la [roadmap](../roadmap.md).
 
 ---
 
