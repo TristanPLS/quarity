@@ -227,3 +227,56 @@ async fn invalid_parameter_is_bad_request() {
         "un paramètre hors allowlist doit être rejeté en 400"
     );
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CORS & en-têtes de sécurité (A3)
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn security_headers_are_present() {
+    let base = spawn_app().await;
+    let res = reqwest::Client::new()
+        .get(format!("{base}/health"))
+        .send()
+        .await
+        .expect("requête health");
+    let h = res.headers();
+    assert_eq!(h.get("x-content-type-options").unwrap(), "nosniff");
+    assert_eq!(h.get("x-frame-options").unwrap(), "DENY");
+    assert!(h.get("content-security-policy").is_some(), "CSP attendue");
+    assert!(
+        h.get("referrer-policy").is_some(),
+        "Referrer-Policy attendu"
+    );
+}
+
+#[tokio::test]
+async fn cors_allows_configured_origin() {
+    let base = spawn_app().await;
+    // Origine par défaut autorisée (cf. Config : http://localhost:3000).
+    let res = reqwest::Client::new()
+        .get(format!("{base}/health"))
+        .header("Origin", "http://localhost:3000")
+        .send()
+        .await
+        .expect("requête health");
+    assert_eq!(
+        res.headers()
+            .get("access-control-allow-origin")
+            .and_then(|v| v.to_str().ok()),
+        Some("http://localhost:3000")
+    );
+}
+
+#[tokio::test]
+async fn cors_rejects_unknown_origin() {
+    let base = spawn_app().await;
+    let res = reqwest::Client::new()
+        .get(format!("{base}/health"))
+        .header("Origin", "http://evil.example")
+        .send()
+        .await
+        .expect("requête health");
+    // Origine non autorisée → pas d'en-tête ACAO (le navigateur bloquerait la lecture).
+    assert!(res.headers().get("access-control-allow-origin").is_none());
+}
