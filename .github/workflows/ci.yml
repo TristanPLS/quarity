@@ -1,0 +1,137 @@
+name: CI
+
+on:
+  push:
+    branches: [dev, master]
+  pull_request:
+    branches: [dev, master]
+
+# Annule les runs obsolètes sur une même réf (PR repoussée).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ===========================================================================
+  back:
+    name: Back — fmt · clippy · tests d'intégration (vraies bases)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: quarity
+          POSTGRES_PASSWORD: quarity_ci
+          POSTGRES_DB: quarity
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U quarity -d quarity"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+      clickhouse:
+        image: clickhouse/clickhouse-server:24.8-alpine
+        env:
+          CLICKHOUSE_USER: quarity
+          CLICKHOUSE_PASSWORD: quarity_ci
+          CLICKHOUSE_DB: quarity
+        ports:
+          - 8123:8123
+          - 9000:9000
+        options: >-
+          --health-cmd "wget --no-verbose --tries=1 --spider http://127.0.0.1:8123/ping || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgres://quarity:quarity_ci@localhost:5432/quarity
+      REDIS_URL: redis://localhost:6379
+      CLICKHOUSE_URL: http://localhost:8123
+      CLICKHOUSE_USER: quarity
+      CLICKHOUSE_PASSWORD: quarity_ci
+      CLICKHOUSE_DB: quarity
+      JWT_SECRET: ci_jwt_secret_must_be_at_least_32_chars
+      JWT_ACCESS_TTL_SECONDS: "900"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain Rust (stable + clippy + rustfmt)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: back
+
+      - name: Charger schéma + seed Postgres
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends postgresql-client
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/sql/01_schema.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/sql/02_seed.sql
+
+      - name: Charger schéma + seed ClickHouse
+        run: |
+          curl -fsSL https://clickhouse.com/ | sh
+          ./clickhouse client --host 127.0.0.1 --port 9000 \
+            --user quarity --password quarity_ci --multiquery < db/clickhouse/01_schema.sql
+          ./clickhouse client --host 127.0.0.1 --port 9000 \
+            --user quarity --password quarity_ci --multiquery < db/clickhouse/02_seed.sql
+
+      - name: Format (cargo fmt --check)
+        working-directory: back
+        run: cargo fmt --all -- --check
+
+      - name: Lint (clippy -D warnings)
+        working-directory: back
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Tests d'intégration (cargo test, bases réelles)
+        working-directory: back
+        run: cargo test --all -- --test-threads=1
+
+  # ===========================================================================
+  front:
+    name: Front — typecheck · build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: front
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: front/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+
+  # ===========================================================================
+  docker:
+    name: Docker — build images back & front
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image back
+        run: docker build -t quarity-back:ci ./back
+      - name: Build image front
+        run: docker build -t quarity-front:ci ./front

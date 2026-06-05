@@ -25,10 +25,9 @@ pub async fn list_measurements(
     user: AuthUser,
     Query(q): Query<MeasurementsQuery>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    let parameter = validate_parameter(&q.parameter)
-        .ok_or(AppError::BadRequest(
-            "parameter invalide (allowlist : pm25, pm10, no2, o3, so2, co)".into(),
-        ))?;
+    let parameter = validate_parameter(&q.parameter).ok_or(AppError::BadRequest(
+        "parameter invalide (allowlist : pm25, pm10, no2, o3, so2, co)".into(),
+    ))?;
 
     // Isolation multi-tenant : l'org du JWT doit suivre cette station.
     let owns = crate::db::org_owns_location(&state.pg, user.org_id, q.location_id as i64).await?;

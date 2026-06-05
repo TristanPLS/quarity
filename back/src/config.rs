@@ -18,7 +18,8 @@ pub struct Config {
 impl Config {
     pub fn from_env() -> anyhow::Result<Arc<Self>> {
         fn req(k: &str) -> anyhow::Result<String> {
-            std::env::var(k).map_err(|_| anyhow::anyhow!("variable d'environnement manquante : {k}"))
+            std::env::var(k)
+                .map_err(|_| anyhow::anyhow!("variable d'environnement manquante : {k}"))
         }
 
         let jwt_secret = req("JWT_SECRET")?;
