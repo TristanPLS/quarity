@@ -29,7 +29,6 @@ struct OaqResp<T> {
 }
 #[derive(Deserialize)]
 struct OaqLocation {
-    id: i64,
     name: Option<String>,
     country: Option<OaqCountry>,
     coordinates: Option<OaqCoords>,
@@ -99,7 +98,11 @@ fn to_ch_datetime(utc: &str) -> String {
     }
 }
 
-async fn oaq_get<T: for<'de> Deserialize<'de>>(client: &Client, key: &str, url: &str) -> Result<Vec<T>> {
+async fn oaq_get<T: for<'de> Deserialize<'de>>(
+    client: &Client,
+    key: &str,
+    url: &str,
+) -> Result<Vec<T>> {
     let resp = client
         .get(url)
         .header("X-API-Key", key)
@@ -127,18 +130,41 @@ async fn main() -> Result<()> {
         .unwrap_or_else(|| "4085".into())
         .parse()
         .context("location_id invalide")?;
-    let days: i64 = std::env::var("OPENAQ_DAYS").ok().and_then(|s| s.parse().ok()).unwrap_or(7);
+    let days: i64 = std::env::var("OPENAQ_DAYS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(7);
     let org_slug = std::env::var("OPENAQ_ORG_SLUG").unwrap_or_else(|_| "agglo-riviera".into());
 
     let http = Client::builder().timeout(Duration::from_secs(30)).build()?;
 
     // 1) Station + capteurs
-    let mut locs: Vec<OaqLocation> = oaq_get(&http, &key, &format!("{OPENAQ_BASE}/v3/locations/{location_id}")).await?;
-    let loc = locs.pop().ok_or_else(|| anyhow!("location {location_id} introuvable"))?;
-    let name = loc.name.clone().unwrap_or_else(|| format!("OpenAQ {location_id}"));
-    let country = loc.country.as_ref().and_then(|c| c.code.clone()).unwrap_or_else(|| "XX".into());
-    let coords = loc.coordinates.unwrap_or(OaqCoords { latitude: 0.0, longitude: 0.0 });
-    println!("Station #{location_id} « {name} » ({country}) — {} capteur(s)", loc.sensors.len());
+    let mut locs: Vec<OaqLocation> = oaq_get(
+        &http,
+        &key,
+        &format!("{OPENAQ_BASE}/v3/locations/{location_id}"),
+    )
+    .await?;
+    let loc = locs
+        .pop()
+        .ok_or_else(|| anyhow!("location {location_id} introuvable"))?;
+    let name = loc
+        .name
+        .clone()
+        .unwrap_or_else(|| format!("OpenAQ {location_id}"));
+    let country = loc
+        .country
+        .as_ref()
+        .and_then(|c| c.code.clone())
+        .unwrap_or_else(|| "XX".into());
+    let coords = loc.coordinates.unwrap_or(OaqCoords {
+        latitude: 0.0,
+        longitude: 0.0,
+    });
+    println!(
+        "Station #{location_id} « {name} » ({country}) — {} capteur(s)",
+        loc.sensors.len()
+    );
 
     // 2) Fenêtre temporelle : N derniers jours
     let to = Utc::now();
@@ -209,7 +235,10 @@ async fn main() -> Result<()> {
         .context("INSERT ClickHouse")?
         .error_for_status()
         .context("statut HTTP ClickHouse")?;
-    println!("✓ {} mesures insérées dans quarity.measurements", rows.len());
+    println!(
+        "✓ {} mesures insérées dans quarity.measurements",
+        rows.len()
+    );
 
     // 5) Liaison Postgres : la station devient suivie par l'org (visibilité front)
     let pool = PgPoolOptions::new()
@@ -218,7 +247,16 @@ async fn main() -> Result<()> {
         .connect(&database_url)
         .await
         .context("connexion Postgres")?;
-    link_org(&pool, location_id, &name, &country, coords, &org_slug, &sensors_to_link).await?;
+    link_org(
+        &pool,
+        location_id,
+        &name,
+        &country,
+        coords,
+        &org_slug,
+        &sensors_to_link,
+    )
+    .await?;
 
     println!();
     println!("✅ Terminé. Dans le front, interroge : location_id={location_id}, parameter=pm25 (org « {org_slug} »).");

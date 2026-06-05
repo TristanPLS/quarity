@@ -1,23 +1,17 @@
 //! Quarity — back (walking skeleton).
 //! Bootstrap : tracing, config (env), connexions (Postgres/Redis/ClickHouse), routeur, serve + arrêt gracieux.
-
-mod ch;
-mod config;
-mod db;
-mod error;
-mod redis_store;
-mod routes;
-mod security;
-mod state;
+//! Les modules vivent dans la lib `quarity_back` (cf. `src/lib.rs`) pour rester testables depuis `tests/`.
 
 use anyhow::Context;
+use quarity_back::{config, routes, security, state};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info,sqlx=warn,hyper=warn")),
+            EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| EnvFilter::new("info,sqlx=warn,hyper=warn")),
         )
         .init();
 
@@ -53,7 +47,9 @@ async fn main() -> anyhow::Result<()> {
 /// Attend Ctrl-C ou SIGTERM (arrêt propre en conteneur).
 async fn shutdown_signal() {
     let ctrl_c = async {
-        tokio::signal::ctrl_c().await.expect("install Ctrl-C handler");
+        tokio::signal::ctrl_c()
+            .await
+            .expect("install Ctrl-C handler");
     };
 
     #[cfg(unix)]
