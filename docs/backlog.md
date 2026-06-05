@@ -79,6 +79,7 @@ README, AGENTS.md, CONTRIBUTING.md, roadmap, pitch, identité, logs. *(Repo Git 
 - [ ] **C4** Déploiement (≥ 1 environnement de démo) ; README final ; **tag `v1.0`**.
 
 ### D. Angles morts de fondation (à trancher tôt — cf. rapport d'analyse)
+> 📄 Décisions instruites dans [`foundations.md`](foundations.md) (proposées + à confirmer juridiquement) — 2026-06-05.
 - [ ] **D1** **Droit d'usage OpenAQ** : licence/attribution pour un produit B2B/B2G **payant**.
 - [ ] **D2** **Qualité des données** OpenAQ : trous, valeurs aberrantes, unités hétérogènes (ppb vs µg/m³) → nettoyage/validation avant alertes sanitaires.
 - [ ] **D3** **Responsabilité** des alertes sanitaires : disclaimer, « non certifié », SLA d'exactitude.
