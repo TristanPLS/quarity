@@ -13,6 +13,8 @@ pub struct Config {
     pub clickhouse_password: String,
     pub jwt_secret: String,
     pub access_ttl_secs: i64,
+    /// Origines autorisées pour CORS (allowlist). Vide ⇒ aucune origine cross-site (same-origin via nginx OK).
+    pub cors_allowed_origins: Vec<String>,
 }
 
 impl Config {
@@ -38,6 +40,14 @@ impl Config {
                 .ok()
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(900),
+            cors_allowed_origins: std::env::var("CORS_ALLOWED_ORIGINS")
+                .map(|s| {
+                    s.split(',')
+                        .map(|o| o.trim().to_string())
+                        .filter(|o| !o.is_empty())
+                        .collect()
+                })
+                .unwrap_or_else(|_| vec!["http://localhost:3000".to_string()]),
         }))
     }
 }
