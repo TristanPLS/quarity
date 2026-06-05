@@ -64,7 +64,7 @@ jobs:
       CLICKHOUSE_USER: quarity
       CLICKHOUSE_PASSWORD: quarity_ci
       CLICKHOUSE_DB: quarity
-      JWT_SECRET: ci_jwt_secret_must_be_at_least_32_chars
+      JWT_SECRET: 7f3b9c1d4e8a2f6b5c0d9e3a1f7b4c8e2d6a0b9c
       JWT_ACCESS_TTL_SECONDS: "900"
 
     steps:
