@@ -1,7 +1,7 @@
 # Quarity — État d'avancement & prochaines missions
 
 > Vue d'ensemble vivante : ce qui est **fait/validé**, la **dette connue**, et les **missions à venir** par priorité.
-> Complète [`roadmap.md`](../../roadmap.md) (le plan) avec l'avancement réel. Trace d'audit détaillée : [`logs/`](../../logs/).
+> Complète [`roadmap.md`](../roadmap.md) (le plan) avec l'avancement réel. Trace d'audit détaillée : [`logs/`](../logs/).
 > Dernière mise à jour : 2026-06-04 (fin du walking skeleton).
 
 ---
