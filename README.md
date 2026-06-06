@@ -47,7 +47,7 @@ Une fois le walking skeleton (Jalon 2) livré :
 
 ## Liens
 
-- 📋 Board (GitHub Projects) : *(lien ajouté en fin de Jalon 0)*
+- 📋 Board (GitHub Projects) : https://github.com/users/TristanPLS/projects/1
 - 🗺️ Roadmap produit : [roadmap.md](roadmap.md)
 - 🧭 Pitch produit : [docs/pitch.md](docs/pitch.md)
 - 🎨 Identité visuelle : [docs/identity.md](docs/identity.md)
