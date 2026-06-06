@@ -76,6 +76,6 @@ Exemples de noms valides :
   > 1) git add db/sql/01_schema.sql db/sql/02_seed.sql
   > 2) git commit -m "feat(bdd): schéma Postgres métier + seed (orgs, lieux, règles, profils d'exposition)"
   > 3) git push -u origin feature/bdd-postgres-schema
-  > Puis : ouvrir une PR vers `dev`, 1 reviewer, squash merge.
+  > Puis : ouvrir une PR vers `dev`, attendre la CI verte, squash merge.
   > ─────────────────────────────────────────────
 ```
