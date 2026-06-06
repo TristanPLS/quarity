@@ -1,7 +1,7 @@
 # Modèle de données — Quarity (Jalon 1)
 
 > MCD/MLD du domaine métier (PostgreSQL 16) + schéma analytics (ClickHouse 24.x) + frontière inter-bases.
-> DDL exécutable : [`db/sql/01_schema.sql`](../db/sql/01_schema.sql) · [`db/sql/02_seed.sql`](../db/sql/02_seed.sql) ·
+> DDL exécutable : [`back/migrations/0001_init.sql`](../back/migrations/0001_init.sql) (schéma Postgres, appliqué au boot du back) · [`db/sql/02_seed.sql`](../db/sql/02_seed.sql) ·
 > [`db/clickhouse/01_schema.sql`](../db/clickhouse/01_schema.sql) · [`db/clickhouse/02_seed.sql`](../db/clickhouse/02_seed.sql).
 > Sert les [user stories](user-stories.md) ; vocabulaire issu du [pitch](pitch.md) et de la [roadmap](../roadmap.md).
 
@@ -93,6 +93,8 @@ erDiagram
 
 ## B. MLD Postgres — points saillants
 
+> **Schéma appliqué via les migrations sqlx** ([`back/migrations/`](../back/migrations/)), exécutées automatiquement au boot du back (`0001_init.sql` = schéma initial gelé ; toute évolution = nouvelle migration). `db/sql/01_schema.sql` est conservé comme simple pointeur.
+
 Conventions : PK `BIGINT GENERATED ALWAYS AS IDENTITY` (référentiels en `INT`) · horodatages `TIMESTAMPTZ` UTC · énums par `CHECK` textuels (sauf RBAC = table `roles`) · `CITEXT` pour emails/slugs.
 
 - **3NF par défaut.** `users` ne porte ni `org_id` ni rôle (multi-org via `memberships`). Le **quota** vit sur `subscription_plans`, jamais copié sur l'abo. L'**unité** vit sur `parameters` : `alert_rules`/`exposure_thresholds` ne dupliquent pas l'unité (dérivée par jointure → évite l'incohérence d'unité signalée en revue).
@@ -152,7 +154,7 @@ Un lieu peut agréger plusieurs stations mesurant le même polluant (ex. « Cent
 
 ## E. Invariants hors-schéma → triggers & procédures (JALON 3)
 
-Règles métier non exprimables par contrainte déclarative, à implémenter au Jalon 3 (tracées dans `01_schema.sql §8`) :
+Règles métier non exprimables par contrainte déclarative, à implémenter au Jalon 3 (tracées dans `back/migrations/0001_init.sql §8`) :
 
 | # | Objet | Rôle | US |
 |---|---|---|---|

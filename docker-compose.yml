@@ -3,12 +3,14 @@ name: quarity
 # =============================================================================
 # Quarity — Walking skeleton, socle bases de données (Jalon 2)
 # =============================================================================
-# `docker compose up -d` lève Postgres + ClickHouse + Redis, avec healthchecks,
-# volumes nommés (persistance) et AUTO-CHARGEMENT des schémas + seeds validés au
-# premier démarrage (répertoires /docker-entrypoint-initdb.d).
+# `docker compose up -d` lève Postgres + ClickHouse + Redis + back + front, avec
+# healthchecks et volumes nommés (persistance).
 #
-# Les services applicatifs back/front sont préparés (commentés en bas) et seront
-# activés quand leur code existera, avec `depends_on: condition: service_healthy`.
+# Ordre de boot Postgres : le SCHÉMA est appliqué par le BACK au démarrage
+# (migrations sqlx — back/migrations/, cf. back/src/main.rs). Plus d'initdb.d
+# côté Postgres. Le seed de démonstration est un service one-shot opt-in :
+#   docker compose --profile seed run --rm seed     (après le 1er boot du back)
+# ClickHouse conserve son initdb.d (schéma + seed au premier démarrage).
 #
 # Prérequis : `cp .env.example .env` puis renseigner les valeurs (aucun secret en dur ici).
 # =============================================================================
@@ -27,16 +29,33 @@ services:
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
+      # plus d'initdb.d : le schéma vient des migrations sqlx du back (back/migrations/)
       - pgdata:/var/lib/postgresql/data
-      # init au 1er boot (ordre alphabétique : schéma puis seed)
-      - ./db/sql/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
-      - ./db/sql/02_seed.sql:/docker-entrypoint-initdb.d/02_seed.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 20s
+
+  # --- Seed démo Postgres (one-shot, opt-in) ---
+  # `docker compose --profile seed run --rm seed` — à lancer APRÈS le premier
+  # démarrage du back (les tables sont créées par ses migrations sqlx).
+  # Rejouable : 02_seed.sql fait TRUNCATE … RESTART IDENTITY CASCADE en tête.
+  seed:
+    image: postgres:16-alpine
+    profiles: ["seed"]
+    environment:
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB}
+    volumes:
+      - ./db/sql/02_seed.sql:/seed/02_seed.sql:ro
+    command: ["psql", "-v", "ON_ERROR_STOP=1", "-f", "/seed/02_seed.sql"]
+    depends_on:
+      postgres: { condition: service_healthy }
 
   # --- ClickHouse 24.x — source de vérité analytics (mesures) ---
   clickhouse:

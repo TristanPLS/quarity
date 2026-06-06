@@ -3,6 +3,8 @@ FROM rust:slim AS builder
 WORKDIR /app
 COPY Cargo.toml Cargo.lock* ./
 COPY src ./src
+# migrations/ est lu À LA COMPILATION par la macro sqlx::migrate! (main.rs)
+COPY migrations ./migrations
 RUN cargo build --release
 
 # ---- runtime ----
