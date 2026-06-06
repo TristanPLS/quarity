@@ -2,18 +2,30 @@
 //!
 //! Usage : `quarity-ingest [location_id]`  (défaut 4085 = NICE PROMENADE)
 //! Env requis : OPENAQ_API_KEY, CLICKHOUSE_URL/USER/PASSWORD/DB, DATABASE_URL.
-//! Env optionnels : OPENAQ_LOCATION_ID, OPENAQ_DAYS (défaut 7), OPENAQ_ORG_SLUG (défaut agglo-riviera).
+//! Env optionnels : OPENAQ_LOCATION_ID, OPENAQ_DAYS (défaut 7), OPENAQ_ORG_SLUG (défaut agglo-riviera),
+//! OPENAQ_MAX_PAGES (défaut 50 — garde-fou de pagination par capteur).
 //!
-//! Récupère une station OpenAQ v3, ses mesures horaires des N derniers jours, les insère dans
-//! quarity.measurements, et lie la station à une organisation (ref_locations + ref_sensors +
-//! tracked_location + tracked_location_stations) pour qu'elle soit interrogeable depuis le front.
+//! Récupère une station OpenAQ v3, ses mesures horaires des N derniers jours (pagination complète
+//! page par page, retry/backoff exponentiel sur les erreurs transitoires, pause de politesse entre
+//! capteurs), les insère dans quarity.measurements, et lie la station à une organisation
+//! (ref_locations + ref_sensors + tracked_location + tracked_location_stations) pour qu'elle soit
+//! interrogeable depuis le front.
+//!
+//! Unités strictes (décision D4.2 de docs/foundations.md) : une mesure sans unité est IGNORÉE
+//! (signalée + comptée dans le résumé de fin de run) — aucun défaut silencieux µg/m³.
+//!
+//! Sémantique de reprise : l'INSERT ClickHouse est idempotent (`measurements` est une
+//! ReplacingMergeTree(ingested_at) et la lecture déduplique via argMax) et la liaison Postgres est
+//! en upsert (ON CONFLICT). Relancer le binaire après un échec partiel est donc SÛR : les lignes
+//! déjà insérées sont réécrites sans doublon visible — c'est le mode de reprise attendu pour un
+//! futur scheduler (A6/B7/B8).
 
 use std::collections::HashMap;
 use std::time::Duration;
 
 use anyhow::{anyhow, Context, Result};
 use chrono::Utc;
-use reqwest::Client;
+use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
@@ -21,6 +33,10 @@ use sqlx::PgPool;
 const OPENAQ_BASE: &str = "https://api.openaq.org";
 /// Polluants gérés par Quarity (allowlist alignée sur la table `parameters`).
 const ALLOWED: &[&str] = &["pm25", "pm10", "no2", "o3", "so2", "co"];
+/// Taille de page OpenAQ v3 (maximum accepté par l'API).
+const PAGE_LIMIT: usize = 1000;
+/// Pause de politesse entre deux capteurs d'une même station (ménage le rate-limit OpenAQ).
+const PAUSE_BETWEEN_SENSORS: Duration = Duration::from_millis(250);
 
 // ---------- Structures de réponse OpenAQ v3 ----------
 #[derive(Deserialize)]
@@ -98,21 +114,100 @@ fn to_ch_datetime(utc: &str) -> String {
     }
 }
 
+/// Extrait l'en-tête `Retry-After` au format « secondes » (la forme date HTTP, rare,
+/// retombe sur le backoff exponentiel).
+fn retry_after_secs(resp: &reqwest::Response) -> Option<Duration> {
+    resp.headers()
+        .get(reqwest::header::RETRY_AFTER)?
+        .to_str()
+        .ok()?
+        .trim()
+        .parse::<u64>()
+        .ok()
+        .map(Duration::from_secs)
+}
+
+/// GET OpenAQ avec retry : 1 essai initial + 3 nouvelles tentatives, backoff exponentiel
+/// 1 s / 2 s / 4 s (`tokio::time::sleep`).
+///
+/// - 429 : on respecte l'en-tête `Retry-After` (en secondes) s'il est présent, sinon backoff ;
+/// - 5xx / erreur réseau (timeout, connexion coupée…) : transitoire, on retente après backoff ;
+/// - 4xx autre que 429 (URL, clé API ou paramètres invalides) : échec immédiat, sans retry —
+///   réessayer ne changerait rien.
+async fn oaq_get_with_retry(client: &Client, key: &str, url: &str) -> Result<reqwest::Response> {
+    const MAX_ATTEMPTS: usize = 4; // 1 essai initial + 3 retries
+    let mut backoff = Duration::from_secs(1);
+    for attempt in 1..=MAX_ATTEMPTS {
+        let (err, wait) = match client.get(url).header("X-API-Key", key).send().await {
+            Ok(resp) if resp.status().is_success() => return Ok(resp),
+            Ok(resp) => {
+                let status = resp.status();
+                if status.is_client_error() && status != StatusCode::TOO_MANY_REQUESTS {
+                    // 4xx hors 429 : erreur non transitoire — inutile de réessayer.
+                    return Err(anyhow!(
+                        "statut HTTP OpenAQ {status} pour {url} (erreur client : échec immédiat, sans retry)"
+                    ));
+                }
+                // 429 : l'API indique parfois quand revenir via Retry-After ; sinon backoff.
+                let wait = if status == StatusCode::TOO_MANY_REQUESTS {
+                    retry_after_secs(&resp).unwrap_or(backoff)
+                } else {
+                    backoff // 5xx transitoire
+                };
+                (anyhow!("statut HTTP OpenAQ {status} pour {url}"), wait)
+            }
+            // Erreur réseau / timeout : transitoire, on retente après le backoff.
+            Err(e) => (anyhow::Error::new(e).context(format!("GET {url}")), backoff),
+        };
+        if attempt == MAX_ATTEMPTS {
+            return Err(err.context(format!("OpenAQ : abandon après {MAX_ATTEMPTS} tentatives")));
+        }
+        eprintln!(
+            "⚠ OpenAQ : tentative {attempt}/{MAX_ATTEMPTS} échouée ({err}) — nouvel essai dans {} s",
+            wait.as_secs()
+        );
+        tokio::time::sleep(wait).await;
+        backoff *= 2;
+    }
+    unreachable!("retry : la dernière tentative retourne toujours Ok ou Err")
+}
+
 async fn oaq_get<T: for<'de> Deserialize<'de>>(
     client: &Client,
     key: &str,
     url: &str,
 ) -> Result<Vec<T>> {
-    let resp = client
-        .get(url)
-        .header("X-API-Key", key)
-        .send()
-        .await
-        .with_context(|| format!("GET {url}"))?
-        .error_for_status()
-        .with_context(|| format!("statut HTTP OpenAQ pour {url}"))?;
+    let resp = oaq_get_with_retry(client, key, url).await?;
     let parsed: OaqResp<T> = resp.json().await.context("parse JSON OpenAQ")?;
     Ok(parsed.results)
+}
+
+/// Récupère TOUTES les pages d'un endpoint OpenAQ paginé (paramètre `page`, 1-indexé).
+///
+/// L'API v3 ne renvoie pas de compteur total fiable : on boucle tant que la page revient
+/// pleine (`len == PAGE_LIMIT`). Le garde-fou `max_pages` (env OPENAQ_MAX_PAGES, défaut 50)
+/// borne le nombre d'appels ; s'il est atteint, on le signale (données possiblement tronquées)
+/// au lieu de boucler sans fin. Retourne `(résultats, nombre de pages lues)`.
+async fn oaq_get_all_pages<T: for<'de> Deserialize<'de>>(
+    client: &Client,
+    key: &str,
+    base_url: &str, // doit déjà contenir une query string (on suffixe &limit=…&page=…)
+    max_pages: usize,
+) -> Result<(Vec<T>, usize)> {
+    let mut all: Vec<T> = Vec::new();
+    for page in 1..=max_pages {
+        let url = format!("{base_url}&limit={PAGE_LIMIT}&page={page}");
+        let batch: Vec<T> = oaq_get(client, key, &url).await?;
+        let page_full = batch.len() == PAGE_LIMIT;
+        all.extend(batch);
+        if !page_full {
+            return Ok((all, page));
+        }
+    }
+    eprintln!(
+        "⚠ garde-fou OPENAQ_MAX_PAGES ({max_pages}) atteint pour {base_url} — données possiblement tronquées"
+    );
+    Ok((all, max_pages))
 }
 
 #[tokio::main]
@@ -135,6 +230,11 @@ async fn main() -> Result<()> {
         .and_then(|s| s.parse().ok())
         .unwrap_or(7);
     let org_slug = std::env::var("OPENAQ_ORG_SLUG").unwrap_or_else(|_| "agglo-riviera".into());
+    let max_pages: usize = std::env::var("OPENAQ_MAX_PAGES")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(50)
+        .max(1);
 
     let http = Client::builder().timeout(Duration::from_secs(30)).build()?;
 
@@ -176,21 +276,45 @@ async fn main() -> Result<()> {
     // 3) Mesures horaires par capteur (allowlist) -> lignes ClickHouse
     let mut rows: Vec<ChRow> = Vec::new();
     let mut per_param: HashMap<String, usize> = HashMap::new();
+    let mut skipped_no_unit: usize = 0; // mesures ignorées faute d'unité (décision D4.2)
     let mut sensors_to_link: Vec<(i64, String)> = Vec::new(); // (openaq_sensor_id, parameter_code)
 
+    let mut first_sensor = true;
     for s in &loc.sensors {
         let pname = s.parameter.name.to_lowercase();
         if !ALLOWED.contains(&pname.as_str()) {
             continue;
         }
+        // Politesse : pause entre deux capteurs d'une même station.
+        if !first_sensor {
+            tokio::time::sleep(PAUSE_BETWEEN_SENSORS).await;
+        }
+        first_sensor = false;
+
         sensors_to_link.push((s.id, pname.clone()));
-        let url = format!(
-            "{OPENAQ_BASE}/v3/sensors/{}/hours?datetime_from={}&datetime_to={}&limit=1000",
+        let base_url = format!(
+            "{OPENAQ_BASE}/v3/sensors/{}/hours?datetime_from={}&datetime_to={}",
             s.id, from_s, to_s
         );
-        let hours: Vec<OaqHour> = oaq_get(&http, &key, &url).await?;
+        let (hours, pages): (Vec<OaqHour>, usize) =
+            oaq_get_all_pages(&http, &key, &base_url, max_pages).await?;
+        println!(
+            "  capteur #{} ({pname}) : {} mesure(s) horaire(s) récupérée(s) sur {pages} page(s)",
+            s.id,
+            hours.len()
+        );
         for h in hours {
             let (Some(value), Some(dt)) = (h.value, h.period.datetime_from.as_ref()) else {
+                continue;
+            };
+            // Unités strictes (décision D4.2, docs/foundations.md) : pas de défaut silencieux
+            // µg/m³ — une mesure sans unité est ignorée et comptée.
+            let Some(unit) = h.parameter.units else {
+                skipped_no_unit += 1;
+                eprintln!(
+                    "⚠ capteur #{} ({pname}) : mesure du {} sans unité — ignorée (décision D4.2)",
+                    s.id, dt.utc
+                );
                 continue;
             };
             rows.push(ChRow {
@@ -198,7 +322,7 @@ async fn main() -> Result<()> {
                 sensor_id: s.id as u64,
                 parameter: pname.clone(),
                 country: country.clone(),
-                unit: h.parameter.units.unwrap_or_else(|| "µg/m³".into()),
+                unit,
                 measured_at: to_ch_datetime(&dt.utc),
                 value,
                 latitude: coords.latitude,
@@ -214,11 +338,15 @@ async fn main() -> Result<()> {
     println!(")");
 
     if rows.is_empty() {
-        println!("Aucune mesure dans la fenêtre — rien à insérer.");
+        println!(
+            "Aucune mesure dans la fenêtre — rien à insérer ({skipped_no_unit} mesure(s) ignorée(s) sans unité, décision D4.2)."
+        );
         return Ok(());
     }
 
     // 4) INSERT batch dans ClickHouse (FORMAT JSONEachRow)
+    // Idempotent : ReplacingMergeTree(ingested_at) + lecture argMax — un re-run après échec
+    // partiel réécrit les mêmes lignes sans doublon visible.
     let mut body = String::from(
         "INSERT INTO quarity.measurements (location_id, sensor_id, parameter, country, unit, measured_at, value, latitude, longitude) FORMAT JSONEachRow\n",
     );
@@ -259,6 +387,10 @@ async fn main() -> Result<()> {
     .await?;
 
     println!();
+    println!(
+        "Résumé : {} mesure(s) insérée(s), {skipped_no_unit} mesure(s) ignorée(s) sans unité (décision D4.2).",
+        rows.len()
+    );
     println!("✅ Terminé. Dans le front, interroge : location_id={location_id}, parameter=pm25 (org « {org_slug} »).");
     Ok(())
 }
@@ -290,7 +422,8 @@ async fn link_org(
     )
     .bind(location_id)
     .bind(name)
-    .bind(&country[..country.len().min(2)])
+    // 2 premiers CARACTÈRES (pas octets : un slice [..2] paniquerait sur du multi-octets UTF-8).
+    .bind(country.chars().take(2).collect::<String>())
     .bind(coords.latitude)
     .bind(coords.longitude)
     .fetch_one(pool)
