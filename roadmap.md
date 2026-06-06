@@ -4,6 +4,8 @@
 **Source de données** : OpenAQ (mesures de qualité de l'air mondiale — capteurs, fréquence ~horaire)
 **Cible** : collectivités, autorités sanitaires, établissements (écoles, hôpitaux), grands comptes (ESG/QSE), applis citoyennes — **B2B/B2G**
 
+> 📌 **Avancement** : ce document est le *plan*. L'avancement réel fait foi dans [docs/backlog.md](docs/backlog.md).
+
 ---
 
 ## Pitchs techniques à connaître (justification d'architecture)
@@ -65,36 +67,36 @@ Le hot path qui bénéficie **spécifiquement** de Moka : la boucle de matching 
 
 ### Personas & user stories
 
-- [ ] 4-5 personas (responsable environnement/santé d'une collectivité, direction d'école/périscolaire, gestionnaire hospitalier/épidémio, analyste ESG, dev appli citoyenne)
-- [ ] 12-15 user stories format `En tant que [rôle], je veux [action] afin de [bénéfice]` avec critères d'acceptation
-- [ ] Priorisation MoSCoW (Must / Should / Could / Won't)
+- [X] 4-5 personas (responsable environnement/santé d'une collectivité, direction d'école/périscolaire, gestionnaire hospitalier/épidémio, analyste ESG, dev appli citoyenne)
+- [X] 12-15 user stories format `En tant que [rôle], je veux [action] afin de [bénéfice]` avec critères d'acceptation
+- [X] Priorisation MoSCoW (Must / Should / Could / Won't)
 
 ### Postgres (MCD → MLD → script)
 
 Tables minimales : `organizations`, `users`, `roles`, `memberships`, `subscription_plans`, `organization_subscriptions`, `api_tokens`, `parameters`, `ref_locations`, `ref_sensors`, `aqi_breakpoints`, `tracked_locations`, `alert_rules`, `alert_rule_recipients`, `alert_events`, `notification_deliveries`, `exposure_profiles`, `exposure_thresholds`, `tracked_location_profiles`.
 
-- [ ] MCD propre en 3NF (au moins)
-- [ ] Au moins une association n-aire gérée proprement (`memberships` user × org × rôle ; `tracked_location_profiles` lieu × profil d'exposition)
-- [ ] Cardinalités vérifiées deux fois
-- [ ] `db/sql/01_schema.sql` + `db/sql/02_seed.sql` versionnés
-- [ ] Le seed contient assez de données pour tester chaque vue/trigger/procédure
+- [X] MCD propre en 3NF (au moins)
+- [X] Au moins une association n-aire gérée proprement (`memberships` user × org × rôle ; `tracked_location_profiles` lieu × profil d'exposition)
+- [X] Cardinalités vérifiées deux fois
+- [X] `db/sql/01_schema.sql` + `db/sql/02_seed.sql` versionnés
+- [X] Le seed contient assez de données pour tester chaque vue/trigger/procédure
 
 ### ClickHouse
 
-- [ ] Table `measurements` partitionnée par mois (`PARTITION BY toYYYYMM(measured_at)`)
-- [ ] `ORDER BY (location_id, parameter, measured_at)`
-- [ ] `LowCardinality(String)` sur `parameter` / `country` / `location_id` (gain compression énorme)
-- [ ] Codecs explicites : `CODEC(DoubleDelta, ZSTD)` sur timestamps, `CODEC(Gorilla, ZSTD)` sur les valeurs
-- [ ] 1-2 `MATERIALIZED VIEW` pour rollups (`measurements_hourly`, `measurements_daily` en `AggregatingMergeTree` — downsampling)
-- [ ] Index `MinMax` sur date, `bloom_filter` sur `location_id`
-- [ ] Plan de TTL : mesures brutes > 90 jours purgées, rollups conservés 2-5 ans
+- [X] Table `measurements` partitionnée par mois (`PARTITION BY toYYYYMM(measured_at)`)
+- [X] `ORDER BY (location_id, parameter, measured_at)`
+- [X] `LowCardinality(String)` sur `parameter` / `country` / `location_id` (gain compression énorme)
+- [X] Codecs explicites : `CODEC(DoubleDelta, ZSTD)` sur timestamps, `CODEC(Gorilla, ZSTD)` sur les valeurs
+- [X] 1-2 `MATERIALIZED VIEW` pour rollups (`measurements_hourly`, `measurements_daily` en `AggregatingMergeTree` — downsampling)
+- [X] Index `MinMax` sur date, `bloom_filter` sur `location_id`
+- [X] Plan de TTL : mesures brutes > 90 jours purgées, rollups conservés 2-5 ans
 
 ### Frontière inter-bases (à documenter)
 
 - Postgres = source de vérité OLTP (users, orgs, lieux suivis, règles, profils d'exposition, abos)
 - ClickHouse = source de vérité analytics (mesures OpenAQ, time-series)
 - Alerte déclenchée = écriture dans `alert_events` (Postgres) + push Redis pub/sub
-- **Pas de duplication.** ClickHouse n'a aucune FK vers Postgres, seulement les clés naturelles OpenAQ (`location_id`/`sensor_id`).
+- **Dénormalisation contrôlée** (cf. docs/data-model.md §D.2). ClickHouse n'a aucune FK vers Postgres, seulement les clés naturelles OpenAQ (`location_id`/`sensor_id`).
 
 ### Wireframes
 
@@ -108,15 +110,15 @@ Tables minimales : `organizations`, `users`, `roles`, `memberships`, `subscripti
 
 **Le tuyau de bout en bout AVANT d'étoffer.** Tant que ça ne marche pas, personne ne travaille sur autre chose. **Non négociable.**
 
-- [ ] `docker-compose.yml` à 5 services : back, postgres, clickhouse, redis, front
-- [ ] Healthchecks sur les 3 DB + `depends_on` avec `condition: service_healthy`
-- [ ] Volumes nommés pour la persistance
-- [ ] `.env.example` propre, aucun secret en dur (clé API OpenAQ en variable)
-- [ ] **Script d'ingestion OpenAQ** (Rust ou Python) : interroge l'API v3 (`/v3/locations`, `/v3/measurements`) + backfill via l'archive S3 open-data, batch insert ClickHouse via driver natif. Ingérer quelques jours pour démarrer.
-- [ ] **Endpoint walking skeleton** : `GET /api/measurements?location=…&parameter=pm25&from=…&to=…` → query ClickHouse → JSON paginé
-- [ ] **Auth JWT** minimale : login (Postgres user lookup + Argon2id) + refresh token (Redis)
-- [ ] **Écran front minimal** : login + série temporelle d'un lieu filtrable
-- [ ] **Doc API auto-générée** accessible à `/api/docs` (utoipa pour Axum)
+- [X] `docker-compose.yml` à 5 services : back, postgres, clickhouse, redis, front
+- [X] Healthchecks sur les 3 DB + `depends_on` avec `condition: service_healthy`
+- [X] Volumes nommés pour la persistance
+- [X] `.env.example` propre, aucun secret en dur (clé API OpenAQ en variable)
+- [ ] **Script d'ingestion OpenAQ** (Rust ou Python) : interroge l'API v3 (`/v3/locations`, `/v3/measurements`) + backfill via l'archive S3 open-data, batch insert ClickHouse via driver natif. Ingérer quelques jours pour démarrer. *(API v3 ✅ livré ; backfill S3 restant → backlog A6)*
+- [X] **Endpoint walking skeleton** : `GET /api/measurements?location_id=…&parameter=pm25&from=…&to=…` → query ClickHouse → JSON paginé
+- [X] **Auth JWT** minimale : login (Postgres user lookup + Argon2id) + refresh token (Redis)
+- [X] **Écran front minimal** : login + série temporelle d'un lieu filtrable
+- [ ] **Doc API auto-générée** accessible à `/api/docs` (utoipa pour Axum) *(différée → backlog A2)*
 - [ ] Test en clonant le repo sur un autre poste : `docker compose up` doit suffire
 
 **Livrable** : un user loggé voit des mesures OpenAQ réelles. C'est moche mais ça prouve que l'archi tient.

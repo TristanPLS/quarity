@@ -12,7 +12,7 @@ Quarity permet à une **collectivité**, une **autorité sanitaire**, un **étab
 | Front | React + Vite | DX moderne, build rapide, écosystème mature |
 | BDD OLTP | PostgreSQL 16 | Users, orgs, lieux suivis, règles d'alerte, profils d'exposition, abonnements (3NF, contraintes fortes) |
 | BDD analytics | ClickHouse 24.x | Mesures OpenAQ — stockage columnar, agrégations time-series, downsampling, rollups |
-| Cache L1 | Moka | In-process, sub-ms lookup pour les règles de seuils compilées |
+| Cache L1 | Moka | In-process, sub-ms lookup pour les règles de seuils compilées *(prévu Jalon 3 — B7, pas encore branché)* |
 | Cache L2 / Pub-Sub | Redis 7 | Sessions, refresh tokens, rate-limit, push WebSocket |
 | Orchestration | Docker Compose | Boot en une commande |
 
@@ -30,10 +30,10 @@ cp .env.example .env   # .env.example livré au Jalon 2
 docker compose up -d
 ```
 
-Une fois le walking skeleton (Jalon 2) livré :
+Le walking skeleton (Jalon 2) est livré :
 
 - Front : http://localhost:3000
-- Doc API (Swagger / OpenAPI via utoipa) : http://localhost:8080/api/docs
+- Doc API (Swagger / OpenAPI via utoipa) : *à venir (backlog A2 — non implémentée à ce jour)*
 
 ## Équipe
 

@@ -38,7 +38,7 @@ Plateforme SaaS qui transforme OpenAQ en **système d'alerte temps réel filtré
 
 - **Postgres** = source de vérité **OLTP** : `users`, `organizations`, `memberships`, `tracked_locations`, `alert_rules`, `exposure_profiles`, `alert_events`, `subscription_plans`. Schéma 3NF, contraintes FK strictes, transactions ACID. C'est là que vit le métier B2B/B2G.
 - **ClickHouse** = source de vérité **analytics** : `measurements` partitionnée mensuellement (`PARTITION BY toYYYYMM(measured_at)`), `ORDER BY (location_id, parameter, measured_at)`, `LowCardinality` sur `parameter`/`country`/`location_id`, codecs `DoubleDelta + ZSTD` sur les timestamps, `Gorilla + ZSTD` sur les valeurs de capteurs. Compression typique 10-50× ; rollups horaires/journaliers en `AggregatingMergeTree`.
-- **Pas de duplication** : une mesure vit dans ClickHouse. Une alerte (« telle mesure a franchi tel seuil à telle date ») vit dans Postgres. La frontière est nette, documentée, et défendable.
+- **Dénormalisation contrôlée, aucune FK cross-DB** : une mesure vit dans ClickHouse. Une alerte (« telle mesure a franchi tel seuil à telle date ») vit dans Postgres. La frontière est nette, documentée, et défendable.
 
 ### 3.2 Pourquoi ClickHouse plutôt que Cassandra (famille colonnes)
 

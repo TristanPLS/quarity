@@ -2,14 +2,14 @@
 
 > Vue d'ensemble vivante : ce qui est **fait/validé**, la **dette connue**, et les **missions à venir** par priorité.
 > Complète [`roadmap.md`](../roadmap.md) (le plan) avec l'avancement réel. Trace d'audit détaillée : [`logs/`](../logs/).
-> Dernière mise à jour : 2026-06-04 (fin du walking skeleton).
+> Dernière mise à jour : 2026-06-06 (Jalon 0 clos, process solo, durcissement en cours).
 
 ---
 
 ## ✅ Fait & validé
 
 ### Jalon 0 — Cadrage
-README, AGENTS.md, CONTRIBUTING.md, roadmap, pitch, identité, logs. *(Repo Git + branches `dev` créées en cours de route.)*
+README, AGENTS.md, CONTRIBUTING.md, roadmap, pitch, identité, logs. *(Repo Git + branches `dev` créées en cours de route.)* **Clos le 2026-06-06** : board GitHub Projects (https://github.com/users/TristanPLS/projects/1), protections master/dev (PR + CI verte obligatoires), templates PR/issue dans .github/. **Process solo acté** : la CI remplace la review humaine.
 
 ### Jalon 1 — Modélisation *(branche `feature/bdd-jalon1-modelisation`)*
 - Personas (5), user stories (16) + **MoSCoW** — `docs/personas.md`, `docs/user-stories.md`.
@@ -19,9 +19,9 @@ README, AGENTS.md, CONTRIBUTING.md, roadmap, pitch, identité, logs. *(Repo Git 
 
 ### Jalon 2 — Walking skeleton *(branches `feature/infra-*`, `feature/back-*`, front/ingest dans le working tree)*
 - **`docker-compose.yml`** : 5 services (postgres, clickhouse, redis, back, front) + healthchecks + `depends_on: service_healthy` + auto-chargement des schémas. `.env.example` propre.
-- **Back Rust/Axum** (`back/`) : auth JWT (Argon2id + refresh Redis), `GET /api/measurements` (ClickHouse, **isolation multi-tenant**, allowlist anti-injection), `/health`. Compile + 9/9 tests e2e.
+- **Back Rust/Axum** (`back/`) : auth JWT (Argon2id + refresh Redis), `GET /api/measurements` (ClickHouse, **isolation multi-tenant**, allowlist anti-injection), `/health`. Compile ; 9/9 vérifications manuelles le 04/06 ; **12 tests e2e versionnés + CI GitHub Actions** le 05/06 (back/tests/e2e.rs, .github/workflows/ci.yml).
 - **Front React/Vite** (`front/`) : login + dashboard série temporelle (recharts), charte `identity.md`, nginx + proxy `/api`. Build + typecheck OK, stack 5 services validé.
-- **Ingestion OpenAQ** (`back/src/bin/ingest.rs`) : station réelle → ClickHouse + liaison org. Service compose `--profile ingest`. **287 mesures réelles** validées end-to-end (NICE PROMENADE #4085).
+- **Ingestion OpenAQ** (`back/src/bin/ingest.rs`) : station réelle → ClickHouse + liaison org. Service compose `--profile ingest`. **287 mesures réelles** validées end-to-end (NICE PROMENADE #4085) *(API v3 uniquement — backfill S3 restant, cf. A6)*.
 
 ➡️ **La chaîne complète fonctionne** : `OpenAQ → ingest → ClickHouse+Postgres → back (JWT+isolation) → nginx → front`.
 
@@ -31,11 +31,11 @@ README, AGENTS.md, CONTRIBUTING.md, roadmap, pitch, identité, logs. *(Repo Git 
 
 | # | Sujet | Détail |
 |---|---|---|
-| D1 | **Structure du dépôt** | `README/AGENTS/CONTRIBUTING/roadmap/logs` sont à la racine `quarity/`, **hors** du dépôt git (`app/`) → non versionnés. Liens README vers `docs/pitch.md` cassés (réels sous `app/docs/`). **À corriger** (remonter dans `app/` ou déplacer le `.git`). |
+| D1 | **Structure du dépôt** | ✅ **Corrigé le 2026-06-05** (log coordinateur) : README/roadmap/logs rapatriés dans app/ ; AGENTS.md et CONTRIBUTING.md volontairement hors dépôt (décision actée). |
 | D2 | **Port Postgres natif** | Un Postgres natif occupe `localhost:5432` sur le poste de dev → lancer avec ports hauts (`POSTGRES_PORT=55432 …`). À documenter pour les devs. |
 | D3 | **Secrets** | `.env` jamais committé (gitignoré). **Clé OpenAQ de dev à régénérer** (exposée en session). `JWT_SECRET` à générer (`openssl rand -hex 32`). |
 | D4 | **Seed = hash démo partagé** | Tous les comptes démo ont le mot de passe `Quarity2026!`. À ne pas reproduire en prod. |
-| D5 | **CORS permissif** | Le back autorise `Any` (skeleton) → allowlist stricte des origins à mettre (cf. missions). |
+| D5 | **CORS permissif** | ✅ **Corrigé le 2026-06-05** (mission A3) : CORS allowlist strict + headers sécurité en place (routes/mod.rs). |
 
 ---
 
@@ -44,11 +44,11 @@ README, AGENTS.md, CONTRIBUTING.md, roadmap, pitch, identité, logs. *(Repo Git 
 ### A. Finir le Jalon 2 / durcissement (court terme)
 - [ ] **A1** Vérif visuelle du front (navigateur) + 1ʳᵉˢ **captures** dans `docs/captures/` (board, Swagger, app).
 - [ ] **A2** Doc **OpenAPI `/api/docs`** (utoipa + utoipa-swagger-ui `vendored`) — différée volontairement, à ajouter.
-- [ ] **A3** **CORS strict** (allowlist origins front) + **headers sécurité** (CSP, HSTS, X-Frame) via tower-http.
+- [x] **A3** **CORS strict** (allowlist origins front) + **headers sécurité** (CSP, HSTS, X-Frame) via tower-http. — ✅ livré 2026-06-05 (logs/2026-06-05__agent-back__cors-headers.md ; la CSP du SPA côté nginx reste suivie via A1)
 - [ ] **A4** **Rate-limit Redis** (token bucket IP + user) + quota par clé API.
 - [ ] **A5** Validation des inputs au boundary (crate `validator`).
 - [ ] **A6** Ingestion : **ordonnancement périodique** (cron/scheduler) + **backfill S3** + pagination/retry/idempotence robustes.
-- [ ] **A7** **CI minimale** : clippy + fmt + `cargo test` + `npm run build` + `docker build` ; ≥ 1 test d'intégration ; **test d'isolation cross-tenant**. (Roadmap la met au Jalon 4 — la remonter ici réduit la dette.)
+- [x] **A7** **CI minimale** : clippy + fmt + `cargo test` + `npm run build` + `docker build` ; ≥ 1 test d'intégration ; **test d'isolation cross-tenant**. (Roadmap la met au Jalon 4 — la remonter ici réduit la dette.) — ✅ livré 2026-06-05 (logs/2026-06-05__agent-back__cross-tenant-tests-ci.md : 12 tests e2e + ci.yml)
 
 ### B. Jalon 3 — Profondeur fonctionnelle
 **BDD** (cf. `docs/data-model.md §E`) :
