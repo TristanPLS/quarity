@@ -45,11 +45,11 @@ Le hot path qui bénéficie **spécifiquement** de Moka : la boucle de matching 
 
 - [X] Rôles répartis : lead BDD (Tristan), lead back, lead front, lead conception/UX-doc
 - [X] Stack arrêtée et écrite dans le README
-- [ ] Repo Git créé : branches `master` (protégée), `dev`, conventions `feature/*`, `fix/*`, `chore/*`, `docs/*`
+- [X] Repo Git créé : branches `master` (protégée), `dev` (protégée), conventions `feature/*`, `fix/*`, `chore/*`, `docs/*` *(protections appliquées le 2026-06-06 : PR obligatoire, 1 review, pas de force-push)*
 - [X] `.gitignore` propre (pas de `.env`, `target/`, `node_modules/`, données OpenAQ téléchargées)
 - [X] Conventional Commits documenté (README + CONTRIBUTING + templates PR/issue)
 - [X] Règle : pas de commit direct sur `master` ni `dev`, PR obligatoire avec 1 reviewer
-- [ ] Board ouvert (GitHub Projects), colonnes : Backlog / À faire / En cours / À valider / Problématique / Terminé
+- [X] Board ouvert (GitHub Projects), colonnes : Backlog / À faire / En cours / À valider / Problématique / Terminé — https://github.com/users/TristanPLS/projects/1
 - [X] Pitch produit rédigé (`docs/pitch.md`)
 - [X] Nom du produit + identité visuelle de base (`docs/identity.md`)
 - [X] **`AGENTS.md` rédigé** (charte agents : zéro action Git, logging dans `logs/`)
