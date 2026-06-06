@@ -67,17 +67,27 @@ pub async fn fetch_user_by_id(pool: &PgPool, user_id: i64) -> Result<Option<User
     .await
 }
 
-/// Recharge rôle + droits pour un couple (user, org) — utilisé au refresh.
-pub async fn fetch_role(
+#[derive(Debug, sqlx::FromRow)]
+pub struct RefreshContextRow {
+    pub role_code: String,
+    pub can_write: bool,
+    /// Revérifié à CHAQUE refresh : un compte désactivé ne doit pas pouvoir
+    /// renouveler sa session indéfiniment via son refresh token.
+    pub is_active: bool,
+}
+
+/// Recharge rôle + droits + statut du compte pour un couple (user, org) — utilisé au refresh.
+pub async fn fetch_refresh_context(
     pool: &PgPool,
     user_id: i64,
     org_id: i64,
-) -> Result<Option<(String, bool)>, sqlx::Error> {
-    sqlx::query_as::<_, (String, bool)>(
+) -> Result<Option<RefreshContextRow>, sqlx::Error> {
+    sqlx::query_as::<_, RefreshContextRow>(
         r#"
-        SELECT r.code, r.can_write
+        SELECT r.code AS role_code, r.can_write AS can_write, u.is_active AS is_active
         FROM memberships m
         JOIN roles r ON r.id = m.role_id
+        JOIN users u ON u.id = m.user_id
         WHERE m.user_id = $1 AND m.org_id = $2
         LIMIT 1
         "#,

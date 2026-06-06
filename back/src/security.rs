@@ -5,8 +5,10 @@ use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, Salt
 use argon2::Argon2;
 use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
+use axum::http::HeaderMap;
 use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
+use std::sync::LazyLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::error::AppError;
@@ -29,6 +31,53 @@ pub fn hash_password(password: &str) -> anyhow::Result<String> {
         .hash_password(password.as_bytes(), &salt)
         .map_err(|e| anyhow::anyhow!("argon2 hash: {e}"))?;
     Ok(hash.to_string())
+}
+
+/// Hash factice constant (calculé une seule fois, mêmes paramètres que les vrais hashes).
+/// Sert UNIQUEMENT à la vérification factice anti-énumération ci-dessous.
+static DUMMY_PHC_HASH: LazyLock<String> = LazyLock::new(|| {
+    hash_password("quarity-dummy-anti-enumeration")
+        .expect("hash argon2 factice (paramètres par défaut — ne peut pas échouer)")
+});
+
+/// Vérification Argon2 factice : égalise le temps de réponse du login quand l'email est
+/// INCONNU (ou le compte inactif), pour qu'un attaquant ne puisse pas distinguer
+/// « email inexistant » de « mauvais mot de passe » au chronomètre. Résultat ignoré.
+pub fn dummy_verify_password(password: &str) {
+    let _ = verify_password(password, &DUMMY_PHC_HASH);
+}
+
+/// IP cliente best-effort pour le rate-limit, SANS `ConnectInfo` (le routeur est servi via
+/// `axum::serve(listener, app)` dans `main.rs` — hors périmètre de ce lot — donc pas de
+/// `into_make_service_with_connect_info`, l'adresse du peer est inaccessible ici).
+///
+/// Priorité :
+/// 1. `X-Real-IP` — écrasé inconditionnellement par notre nginx (`$remote_addr`),
+///    donc NON falsifiable à travers le proxy ;
+/// 2. premier élément de `X-Forwarded-For` (repli, falsifiable car nginx APPEND
+///    via `$proxy_add_x_forwarded_for`) ;
+/// 3. « unknown » sinon (accès direct au back sans proxy).
+///
+/// Limite documentée : en accès direct au port du back (sans nginx devant), ces en-têtes
+/// sont forgeables → le rate-limit par IP est best-effort ; celui par email n'en dépend pas.
+pub fn client_ip(headers: &HeaderMap) -> String {
+    if let Some(ip) = headers.get("x-real-ip").and_then(|v| v.to_str().ok()) {
+        let ip = ip.trim();
+        if !ip.is_empty() {
+            return ip.to_string();
+        }
+    }
+    if let Some(first) = headers
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|xff| xff.split(',').next())
+    {
+        let first = first.trim();
+        if !first.is_empty() {
+            return first.to_string();
+        }
+    }
+    "unknown".into()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -124,5 +173,46 @@ impl FromRequestParts<AppState> for AuthUser {
             can_write: c.can_write,
             jti: c.jti,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{client_ip, dummy_verify_password};
+    use axum::http::HeaderMap;
+
+    #[test]
+    fn client_ip_prefers_x_real_ip() {
+        let mut h = HeaderMap::new();
+        h.insert("x-real-ip", "203.0.113.7".parse().unwrap());
+        h.insert("x-forwarded-for", "198.51.100.1, 10.0.0.2".parse().unwrap());
+        assert_eq!(client_ip(&h), "203.0.113.7");
+    }
+
+    #[test]
+    fn client_ip_falls_back_to_first_xff_element() {
+        let mut h = HeaderMap::new();
+        h.insert("x-forwarded-for", "198.51.100.1, 10.0.0.2".parse().unwrap());
+        assert_eq!(client_ip(&h), "198.51.100.1");
+    }
+
+    #[test]
+    fn client_ip_unknown_without_headers() {
+        assert_eq!(client_ip(&HeaderMap::new()), "unknown");
+    }
+
+    #[test]
+    fn client_ip_ignores_empty_headers() {
+        let mut h = HeaderMap::new();
+        h.insert("x-real-ip", "  ".parse().unwrap());
+        h.insert("x-forwarded-for", "".parse().unwrap());
+        assert_eq!(client_ip(&h), "unknown");
+    }
+
+    #[test]
+    fn dummy_verify_never_panics() {
+        // Vérification factice : doit s'exécuter sans panic, quel que soit le mot de passe.
+        dummy_verify_password("n'importe quoi");
+        dummy_verify_password("");
     }
 }
