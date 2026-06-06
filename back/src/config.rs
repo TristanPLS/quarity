@@ -13,6 +13,14 @@ pub struct Config {
     pub clickhouse_password: String,
     pub jwt_secret: String,
     pub access_ttl_secs: i64,
+    /// TTL des refresh tokens en Redis (`REFRESH_TTL_SECS`, déf. 604800 = 7 j).
+    pub refresh_ttl_secs: u64,
+    /// Rate-limit login par email — tentatives/minute (`RATE_LIMIT_LOGIN_EMAIL_PER_MIN`, déf. 5).
+    pub rate_limit_login_email_per_min: u64,
+    /// Rate-limit login par IP — tentatives/minute (`RATE_LIMIT_LOGIN_IP_PER_MIN`, déf. 20).
+    pub rate_limit_login_ip_per_min: u64,
+    /// Rate-limit refresh par IP — tentatives/minute (`RATE_LIMIT_REFRESH_IP_PER_MIN`, déf. 30).
+    pub rate_limit_refresh_ip_per_min: u64,
     /// Origines autorisées pour CORS (allowlist). Vide ⇒ aucune origine cross-site (same-origin via nginx OK).
     pub cors_allowed_origins: Vec<String>,
 }
@@ -22,6 +30,14 @@ impl Config {
         fn req(k: &str) -> anyhow::Result<String> {
             std::env::var(k)
                 .map_err(|_| anyhow::anyhow!("variable d'environnement manquante : {k}"))
+        }
+
+        /// Entier non signé optionnel avec défaut (valeur illisible ⇒ défaut).
+        fn env_u64(k: &str, default: u64) -> u64 {
+            std::env::var(k)
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(default)
         }
 
         let jwt_secret = req("JWT_SECRET")?;
@@ -40,6 +56,10 @@ impl Config {
                 .ok()
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(900),
+            refresh_ttl_secs: env_u64("REFRESH_TTL_SECS", 7 * 24 * 60 * 60),
+            rate_limit_login_email_per_min: env_u64("RATE_LIMIT_LOGIN_EMAIL_PER_MIN", 5),
+            rate_limit_login_ip_per_min: env_u64("RATE_LIMIT_LOGIN_IP_PER_MIN", 20),
+            rate_limit_refresh_ip_per_min: env_u64("RATE_LIMIT_REFRESH_IP_PER_MIN", 30),
             cors_allowed_origins: std::env::var("CORS_ALLOWED_ORIGINS")
                 .map(|s| {
                     s.split(',')

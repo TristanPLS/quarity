@@ -11,6 +11,8 @@ pub enum AppError {
     Unauthorized(&'static str),
     Forbidden(&'static str),
     NotFound(&'static str),
+    /// Rate-limit dépassé → 429, code stable `rate_limited`, message humain en payload.
+    TooManyRequests(&'static str),
     Internal(anyhow::Error),
 }
 
@@ -21,6 +23,11 @@ impl IntoResponse for AppError {
             AppError::Unauthorized(c) => (StatusCode::UNAUTHORIZED, c.to_string(), c.to_string()),
             AppError::Forbidden(c) => (StatusCode::FORBIDDEN, c.to_string(), c.to_string()),
             AppError::NotFound(c) => (StatusCode::NOT_FOUND, c.to_string(), c.to_string()),
+            AppError::TooManyRequests(m) => (
+                StatusCode::TOO_MANY_REQUESTS,
+                "rate_limited".to_string(),
+                m.to_string(),
+            ),
             AppError::Internal(e) => {
                 tracing::error!(error = ?e, "erreur interne");
                 (
