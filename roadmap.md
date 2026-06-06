@@ -48,7 +48,7 @@ Le hot path qui bénéficie **spécifiquement** de Moka : la boucle de matching 
 - [X] Repo Git créé : branches `master` (protégée), `dev` (protégée), conventions `feature/*`, `fix/*`, `chore/*`, `docs/*` *(protections appliquées le 2026-06-06 : PR obligatoire, 1 review, pas de force-push)*
 - [X] `.gitignore` propre (pas de `.env`, `target/`, `node_modules/`, données OpenAQ téléchargées)
 - [X] Conventional Commits documenté (README + CONTRIBUTING + templates PR/issue)
-- [X] Règle : pas de commit direct sur `master` ni `dev`, PR obligatoire avec 1 reviewer
+- [X] Règle : pas de commit direct sur `master` ni `dev`, PR obligatoire avec CI verte *(process solo acté le 2026-06-06 — la CI remplace la review humaine)*
 - [X] Board ouvert (GitHub Projects), colonnes : Backlog / À faire / En cours / À valider / Problématique / Terminé — https://github.com/users/TristanPLS/projects/1
 - [X] Pitch produit rédigé (`docs/pitch.md`)
 - [X] Nom du produit + identité visuelle de base (`docs/identity.md`)
@@ -202,7 +202,7 @@ Travail en parallèle sur 4 axes.
 ## Règles de discipline (à tenir tout du long)
 
 1. **Captures en temps réel** — screenshot à chaque feature finie, dans `docs/captures/`. Pas la veille.
-2. **Pas de commit sur `master` ni `dev`** — toujours par PR avec 1 reviewer minimum. (Exécuté par l'humain ; les agents préparent et signalent — voir `AGENTS.md`.)
+2. **Pas de commit sur `master` ni `dev`** — toujours par PR avec CI verte obligatoire (process solo : la CI tient le rôle de reviewer). (Exécuté par l'humain ; les agents préparent et signalent — voir `AGENTS.md`.)
 3. **Revue d'itération régulière** — ce qui avance, ce qui bloque, ce qui glisse. Si quelqu'un cale, c'est détecté tôt.
 4. **Pas de fichier flottant sur Discord** — tout dans le board ou le repo.
 5. **Les agents loggent toutes leurs actions** dans `logs/` (voir `AGENTS.md` §6). C'est la trace d'audit du projet.

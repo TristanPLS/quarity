@@ -37,13 +37,7 @@ Une fois le walking skeleton (Jalon 2) livré :
 
 ## Équipe
 
-| Rôle | Owner |
-|---|---|
-| Lead BDD (Postgres + ClickHouse) | Tristan |
-| Lead Back (Rust / Axum) | *TBD* |
-| Lead Front (React / Vite) | *TBD* |
-| Lead Conception / UX-doc | *TBD* |
-| Agents IA (Claude Code) | charte interne (hors dépôt) |
+Projet mené **en solo** par Tristan (tous les axes : BDD, back, front, conception/UX-doc), assisté d'agents IA (Claude Code — charte interne, hors dépôt). La review humaine des PR est remplacée par la **CI obligatoire** (3 checks requis avant merge).
 
 ## Liens
 
@@ -56,7 +50,7 @@ Une fois le walking skeleton (Jalon 2) livré :
 
 ## Contribuer
 
-Règles non-négociables : **Conventional Commits**, **PR obligatoire** avec 1 reviewer minimum, **pas de commit direct** sur `master` ni `dev`.
+Règles non-négociables : **Conventional Commits**, **PR obligatoire** avec **CI verte** (3 checks requis), **pas de commit direct** sur `master` ni `dev`.
 
 > Les actions Git/GitHub sont effectuées **par les humains**. Les agents IA préparent le travail et **signalent** la commande à lancer — ils ne committent ni ne poussent jamais.
 
