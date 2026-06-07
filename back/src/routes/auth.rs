@@ -16,19 +16,30 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use utoipa::ToSchema;
 use uuid::Uuid;
+use validator::Validate;
 
 use crate::error::AppError;
 use crate::openapi::{ErrorBody, LogoutResponse, MeResponse};
 use crate::security::{self, AuthUser};
 use crate::state::AppState;
+use crate::validation::ValidatedJson;
 
 /// Fenêtre des compteurs de rate-limit (les limites configurées sont « par minute »).
 const RATE_LIMIT_WINDOW_SECS: i64 = 60;
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Deserialize, ToSchema, Validate)]
 pub struct LoginRequest {
+    /// 1 à 254 caractères (longueur maximale RFC d'une adresse), non composé
+    /// uniquement d'espaces.
+    #[validate(
+        length(min = 1, max = 254, message = "longueur attendue 1..=254"),
+        custom(function = "crate::validation::validate_not_blank")
+    )]
     #[schema(example = "sophie@agglo-riviera.fr")]
     pub email: String,
+    /// 1 à 512 caractères — borne anti-DoS : sans plafond, un corps arbitrairement
+    /// long part dans une vérification Argon2 coûteuse.
+    #[validate(length(min = 1, max = 512, message = "longueur attendue 1..=512"))]
     #[schema(example = "Quarity2026!")]
     pub password: String,
 }
@@ -54,7 +65,7 @@ pub struct TokenResponse {
     request_body = LoginRequest,
     responses(
         (status = 200, description = "Authentification réussie", body = TokenResponse),
-        (status = 400, description = "Email ou mot de passe vide (corps `ErrorBody`) — ou JSON malformé (rejet de l'extracteur, corps texte)", body = ErrorBody),
+        (status = 400, description = "Email ou mot de passe vide ou hors bornes (validation — corps `ErrorBody`) — ou JSON malformé (rejet de l'extracteur, corps texte)", body = ErrorBody),
         (status = 401, description = "Identifiants invalides (`invalid_credentials`)", body = ErrorBody),
         (status = 415, description = "`Content-Type` non JSON (rejet de l'extracteur, corps texte)"),
         (status = 422, description = "Champs manquants ou mal typés (rejet de l'extracteur, corps texte)"),
@@ -64,12 +75,10 @@ pub struct TokenResponse {
 pub async fn login(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Json(req): Json<LoginRequest>,
+    ValidatedJson(req): ValidatedJson<LoginRequest>,
 ) -> Result<Json<TokenResponse>, AppError> {
-    if req.email.trim().is_empty() || req.password.is_empty() {
-        return Err(AppError::BadRequest("email et mot de passe requis".into()));
-    }
-
+    // La présence/longueur/non-blancheur est garantie par `ValidatedJson<LoginRequest>`
+    // (A5) — il ne reste ici que la NORMALISATION de l'identifiant.
     let email = req.email.trim().to_lowercase();
     let mut conn = state.redis.clone();
 
@@ -141,8 +150,10 @@ pub async fn login(
     }))
 }
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Deserialize, ToSchema, Validate)]
 pub struct RefreshRequest {
+    /// 1 à 128 caractères (les jetons émis sont des UUID v4 — 36 caractères).
+    #[validate(length(min = 1, max = 128, message = "longueur attendue 1..=128"))]
     pub refresh_token: String,
 }
 
@@ -154,7 +165,7 @@ pub struct RefreshRequest {
     request_body = RefreshRequest,
     responses(
         (status = 200, description = "Nouveau couple de jetons (l'ancien refresh est révoqué)", body = TokenResponse),
-        (status = 400, description = "JSON malformé (rejet de l'extracteur, corps texte)"),
+        (status = 400, description = "`refresh_token` vide ou hors bornes (validation — corps `ErrorBody`) — ou JSON malformé (rejet de l'extracteur, corps texte)", body = ErrorBody),
         (status = 401, description = "Refresh token inconnu, expiré, ou compte désactivé (`invalid_refresh`)", body = ErrorBody),
         (status = 415, description = "`Content-Type` non JSON (rejet de l'extracteur, corps texte)"),
         (status = 422, description = "Champ `refresh_token` manquant ou mal typé (rejet de l'extracteur, corps texte)"),
@@ -164,7 +175,7 @@ pub struct RefreshRequest {
 pub async fn refresh(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Json(req): Json<RefreshRequest>,
+    ValidatedJson(req): ValidatedJson<RefreshRequest>,
 ) -> Result<Json<TokenResponse>, AppError> {
     let mut conn = state.redis.clone();
 
@@ -231,8 +242,10 @@ pub async fn refresh(
     }))
 }
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Deserialize, ToSchema, Validate)]
 pub struct LogoutRequest {
+    /// 1 à 128 caractères (les jetons émis sont des UUID v4 — 36 caractères).
+    #[validate(length(min = 1, max = 128, message = "longueur attendue 1..=128"))]
     pub refresh_token: String,
 }
 
@@ -250,7 +263,7 @@ pub struct LogoutRequest {
     security(("bearer_jwt" = [])),
     responses(
         (status = 200, description = "Réponse identique que le token soit valide, inconnu ou à autrui (anti-oracle)", body = LogoutResponse),
-        (status = 400, description = "JSON malformé (rejet de l'extracteur, corps texte)"),
+        (status = 400, description = "`refresh_token` vide ou hors bornes (validation — corps `ErrorBody`) — ou JSON malformé (rejet de l'extracteur, corps texte)", body = ErrorBody),
         (status = 401, description = "Bearer manquant ou invalide", body = ErrorBody),
         (status = 415, description = "`Content-Type` non JSON (rejet de l'extracteur, corps texte)"),
         (status = 422, description = "Champ `refresh_token` manquant ou mal typé (rejet de l'extracteur, corps texte)"),
@@ -259,7 +272,7 @@ pub struct LogoutRequest {
 pub async fn logout(
     State(state): State<AppState>,
     user: AuthUser,
-    Json(req): Json<LogoutRequest>,
+    ValidatedJson(req): ValidatedJson<LogoutRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let mut conn = state.redis.clone();
     match crate::redis_store::read_refresh(&mut conn, &req.refresh_token).await? {

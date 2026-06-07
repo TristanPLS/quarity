@@ -13,3 +13,4 @@ pub mod redis_store;
 pub mod routes;
 pub mod security;
 pub mod state;
+pub mod validation;
