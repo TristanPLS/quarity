@@ -5,7 +5,9 @@
 -- procédure du Jalon 3 + l'isolation multi-tenant (3 orgs).
 -- Les FK sont résolues par SOUS-REQUÊTE sur clés naturelles (slug/email/code/…),
 -- car les PK sont GENERATED ALWAYS AS IDENTITY (pas d'ID en dur).
--- Prérequis : 01_schema.sql appliqué. Rejouable (TRUNCATE en tête).
+-- Prérequis : schéma appliqué — migrations sqlx du back (back/migrations/0001_init.sql,
+-- exécutées au boot ; en CI/local : psql -f back/migrations/0001_init.sql).
+-- Exécution : `docker compose --profile seed run --rm seed`. Rejouable (TRUNCATE en tête).
 -- =============================================================================
 
 BEGIN;

@@ -47,7 +47,7 @@ Le hot path qui bénéficie **spécifiquement** de Moka : la boucle de matching 
 
 - [X] Rôles répartis : lead BDD (Tristan), lead back, lead front, lead conception/UX-doc
 - [X] Stack arrêtée et écrite dans le README
-- [X] Repo Git créé : branches `master` (protégée), `dev` (protégée), conventions `feature/*`, `fix/*`, `chore/*`, `docs/*` *(protections appliquées le 2026-06-06 : PR obligatoire, 1 review, pas de force-push)*
+- [X] Repo Git créé : branches `master` (protégée), `dev` (protégée), conventions `feature/*`, `fix/*`, `chore/*`, `docs/*` *(protections appliquées le 2026-06-06, ajustées le jour même au process solo : PR obligatoire + CI verte — 0 review humaine, pas de force-push)*
 - [X] `.gitignore` propre (pas de `.env`, `target/`, `node_modules/`, données OpenAQ téléchargées)
 - [X] Conventional Commits documenté (README + CONTRIBUTING + templates PR/issue)
 - [X] Règle : pas de commit direct sur `master` ni `dev`, PR obligatoire avec CI verte *(process solo acté le 2026-06-06 — la CI remplace la review humaine)*
