@@ -133,12 +133,12 @@ Travail en parallèle sur 4 axes.
 
 **Postgres** :
 
-- [ ] 2 vues métier (ex : `org_active_zones_view`, `org_alert_stats_view`)
-- [ ] 2 triggers (ex : audit auto sur `alert_rules`, dénormalisation compteur d'alertes non-lues)
-- [ ] 3 procédures stockées (ex : `create_tracked_location_with_rules`, `archive_old_alert_events`, `compute_exposure_dose`)
-- [ ] 1 transaction explicite avec ROLLBACK testé (ex : création org + premier user + abo)
-- [ ] 1 index non-trivial (ex : index partiel `alert_events(org_id, fired_at) WHERE read = false`)
-- [ ] **Requête métier complexe** : 4 jointures + GROUP BY + HAVING + 1 CTE — fichier `db/sql/queries/complex_business_query.sql`. Cas : top 10 orgs par volume d'alertes critiques sur le dernier trimestre, avec plan d'abo + ratio lu/non-lu.
+- [X] 2 vues métier (`org_active_zones_view`, `org_alert_stats_view`) *(2026-06-07 — migration 0002, backlog B1)*
+- [X] 2 triggers — **6 livrés, T1–T6** (audit auto `alert_rules`, compteur non-lus, + invariants isolation/immuabilité) *(2026-06-07 — migration 0003, backlog B2)*
+- [X] 3 procédures stockées (`create_tracked_location_with_rules`, `archive_old_alert_events`, `compute_exposure_dose`) *(2026-06-07 — migration 0004, backlog B3)*
+- [X] 1 transaction explicite avec ROLLBACK testé *(cas retenu : P1 lieu+stations+règles — back/tests/db.rs)*
+- [X] 1 index non-trivial (index partiel `alert_events(org_id, fired_at) WHERE is_read = false`) *(livré dès 0001_init.sql:306)*
+- [X] **Requête métier complexe** : 4 jointures + GROUP BY + HAVING + 1 CTE — fichier `db/sql/queries/complex_business_query.sql`. Cas : top 10 orgs par volume d'alertes critiques sur le dernier trimestre, avec plan d'abo + ratio lu/non-lu. *(2026-06-07 — backlog B4)*
 
 **ClickHouse** :
 

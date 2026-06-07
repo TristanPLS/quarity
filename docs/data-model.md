@@ -154,7 +154,9 @@ Un lieu peut agréger plusieurs stations mesurant le même polluant (ex. « Cent
 
 ## E. Invariants hors-schéma → triggers & procédures (JALON 3)
 
-Règles métier non exprimables par contrainte déclarative, à implémenter au Jalon 3 (tracées dans `back/migrations/0001_init.sql §8`) :
+> ✅ **Livrés le 2026-06-07** (backlog B1–B3) : T1–T6 dans [`back/migrations/0003_triggers.sql`](../back/migrations/0003_triggers.sql), P1–P3 dans [`back/migrations/0004_procedures.sql`](../back/migrations/0004_procedures.sql) (+ vues B1 dans `0002_business_views.sql`). Tests : `back/tests/db.rs`. Nuances d'implémentation : T4 autorise les transitions **vers NULL** d'`alert_rule_id`/`tracked_location_id` (FK `ON DELETE SET NULL` — le SET NULL référentiel passe par le trigger d'UPDATE) ; P3 est la moitié **transactionnelle** (l'agrégat fenêtré ClickHouse arrive avec B9).
+
+Règles métier non exprimables par contrainte déclarative (tracées dans `back/migrations/0001_init.sql §8` — fichier gelé, l'implémentation vit dans 0003/0004) :
 
 | # | Objet | Rôle | US |
 |---|---|---|---|
