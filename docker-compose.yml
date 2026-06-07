@@ -163,13 +163,6 @@ services:
       - "${FRONT_PORT:-3000}:80"
     depends_on:
       - back
-  #   build: ./front                      # Dockerfile React/Vite (à créer)
-  #   container_name: quarity_front
-  #   restart: unless-stopped
-  #   ports:
-  #     - "${FRONT_PORT:-3000}:3000"
-  #   depends_on:
-  #     back: { condition: service_started }
 
 volumes:
   pgdata:
