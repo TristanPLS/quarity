@@ -2,7 +2,7 @@
 
 > Vue d'ensemble vivante : ce qui est **fait/validé**, la **dette connue**, et les **missions à venir** par priorité.
 > Complète [`roadmap.md`](../roadmap.md) (le plan) avec l'avancement réel. Trace d'audit détaillée : [`logs/`](../logs/).
-> Dernière mise à jour : 2026-06-06 (Jalon 0 clos, process solo, durcissement en cours).
+> Dernière mise à jour : 2026-06-07 (lots post-revue mergés : auth durcie #14, ingestion robuste #15, migrations sqlx #16 — critiques n°1 et n°2 de la revue du 06/06 résolues).
 
 ---
 
@@ -14,14 +14,19 @@ README, AGENTS.md, CONTRIBUTING.md, roadmap, pitch, identité, logs. *(Repo Git 
 ### Jalon 1 — Modélisation *(branche `feature/bdd-jalon1-modelisation`)*
 - Personas (5), user stories (16) + **MoSCoW** — `docs/personas.md`, `docs/user-stories.md`.
 - **MCD/MLD + frontière inter-bases** — `docs/data-model.md`.
-- **Postgres 16** : 23 tables 3NF, FK, index partiels — `db/sql/01_schema.sql` + `02_seed.sql` (**exécutés/validés** sur Postgres réel).
+- **Postgres 16** : 23 tables 3NF, FK, index partiels — schéma gelé dans `back/migrations/0001_init.sql` (**migrations sqlx appliquées au boot du back** depuis la PR #16 ; `db/sql/01_schema.sql` = pointeur) + `02_seed.sql` (**exécutés/validés** sur Postgres réel).
 - **ClickHouse 24.8** : `measurements` ReplacingMergeTree + 2 rollups MV + TTL — `db/clickhouse/01_schema.sql` + `02_seed.sql` (**validés**, dédup prouvée).
 
 ### Jalon 2 — Walking skeleton *(branches `feature/infra-*`, `feature/back-*`, front/ingest dans le working tree)*
-- **`docker-compose.yml`** : 5 services (postgres, clickhouse, redis, back, front) + healthchecks + `depends_on: service_healthy` + auto-chargement des schémas. `.env.example` propre.
-- **Back Rust/Axum** (`back/`) : auth JWT (Argon2id + refresh Redis), `GET /api/measurements` (ClickHouse, **isolation multi-tenant**, allowlist anti-injection), `/health`. Compile ; 9/9 vérifications manuelles le 04/06 ; **12 tests e2e versionnés + CI GitHub Actions** le 05/06 (back/tests/e2e.rs, .github/workflows/ci.yml).
+- **`docker-compose.yml`** : 5 services (postgres, clickhouse, redis, back, front) + one-shot `seed`/`ingest` sous profils + healthchecks + `depends_on: service_healthy`. Schéma ClickHouse auto-chargé (initdb.d) ; schéma Postgres appliqué par les **migrations sqlx au boot du back** (PR #16). `.env.example` propre.
+- **Back Rust/Axum** (`back/`) : auth JWT (Argon2id + refresh Redis), `GET /api/measurements` (ClickHouse, **isolation multi-tenant**, allowlist anti-injection), `/health`. Compile ; 9/9 vérifications manuelles le 04/06 ; **15 tests e2e versionnés + CI GitHub Actions** (12 le 05/06 + 3 au durcissement auth — back/tests/e2e.rs, .github/workflows/ci.yml).
 - **Front React/Vite** (`front/`) : login + dashboard série temporelle (recharts), charte `identity.md`, nginx + proxy `/api`. Build + typecheck OK, stack 5 services validé.
 - **Ingestion OpenAQ** (`back/src/bin/ingest.rs`) : station réelle → ClickHouse + liaison org. Service compose `--profile ingest`. **287 mesures réelles** validées end-to-end (NICE PROMENADE #4085) *(API v3 uniquement — backfill S3 restant, cf. A6)*.
+
+### Post-revue du 06/06 — durcissement & socle *(mergé le 2026-06-07)*
+- **Auth durcie** (PR #14) : refresh découplé du jti (S4), revalidation `is_active` au refresh, **rate-limit Redis** login/refresh, anti-énumération temporelle, logout durci — +3 tests e2e (logs/2026-06-06__agent-back__auth-hardening.md).
+- **Ingestion robuste** (PR #15) : pagination complète, retry/backoff + `Retry-After`, **unités strictes** (décision D4.2 — clôt le volet ingestion de la critique n°2) (logs/2026-06-06__agent-infra__ingest-robustesse.md).
+- **Migrations sqlx** (PR #16) : schéma gelé `back/migrations/0001_init.sql` appliqué au boot du back, `db/sql/01_schema.sql` → pointeur, seed démo via `--profile seed`, COMMENT unités AQI corrigé — **résout la critique n°1 et le volet schéma de la n°2** (logs/2026-06-06__agent-bdd__migrations-sqlx.md).
 
 ➡️ **La chaîne complète fonctionne** : `OpenAQ → ingest → ClickHouse+Postgres → back (JWT+isolation) → nginx → front`.
 
@@ -45,9 +50,9 @@ README, AGENTS.md, CONTRIBUTING.md, roadmap, pitch, identité, logs. *(Repo Git 
 - [ ] **A1** Vérif visuelle du front (navigateur) + 1ʳᵉˢ **captures** dans `docs/captures/` (board, Swagger, app).
 - [ ] **A2** Doc **OpenAPI `/api/docs`** (utoipa + utoipa-swagger-ui `vendored`) — différée volontairement, à ajouter.
 - [x] **A3** **CORS strict** (allowlist origins front) + **headers sécurité** (CSP, HSTS, X-Frame) via tower-http. — ✅ livré 2026-06-05 (logs/2026-06-05__agent-back__cors-headers.md ; la CSP du SPA côté nginx reste suivie via A1)
-- [ ] **A4** **Rate-limit Redis** (token bucket IP + user) + quota par clé API.
+- [x] **A4** **Rate-limit Redis** (login par email + IP, refresh par IP — fenêtre fixe). — ✅ livré 2026-06-07 (PR #14, logs/2026-06-06__agent-back__auth-hardening.md). *Reste (→ B9) : token bucket généralisé + quota par clé API.*
 - [ ] **A5** Validation des inputs au boundary (crate `validator`).
-- [ ] **A6** Ingestion : **ordonnancement périodique** (cron/scheduler) + **backfill S3** + pagination/retry/idempotence robustes.
+- [ ] **A6** Ingestion : **ordonnancement périodique** (cron/scheduler) + **backfill S3**. *(pagination/retry ✅ livrés 2026-06-07 — PR #15, logs/2026-06-06__agent-infra__ingest-robustesse.md ; idempotence déjà assurée par ReplacingMergeTree + upserts, confirmée comme sémantique de reprise)*
 - [x] **A7** **CI minimale** : clippy + fmt + `cargo test` + `npm run build` + `docker build` ; ≥ 1 test d'intégration ; **test d'isolation cross-tenant**. (Roadmap la met au Jalon 4 — la remonter ici réduit la dette.) — ✅ livré 2026-06-05 (logs/2026-06-05__agent-back__cross-tenant-tests-ci.md : 12 tests e2e + ci.yml)
 
 ### B. Jalon 3 — Profondeur fonctionnelle
@@ -87,7 +92,7 @@ README, AGENTS.md, CONTRIBUTING.md, roadmap, pitch, identité, logs. *(Repo Git 
 ---
 
 ## Repères techniques (pour démarrer vite)
-- Lancer : `docker compose up -d --build` (ports hauts si Postgres natif, cf. D2) ; ingérer : `docker compose --profile ingest run --rm ingest [location_id]`.
+- Lancer : `docker compose up -d --build` (ports hauts si Postgres natif, cf. D2) — le schéma Postgres est appliqué par le back au boot (migrations sqlx) ; seed démo : `docker compose --profile seed run --rm seed` ; ingérer : `docker compose --profile ingest run --rm ingest [location_id]`.
 - Comptes démo : `sophie@agglo-riviera.fr` / `Quarity2026!` (org A) · station réelle ingérée : `location_id=4085` (NICE PROMENADE).
 - Versions clés : axum 0.8, sqlx 0.8, redis 0.27, reqwest 0.12 · React 18.3, Vite 6, react-router 7.9, recharts 2.15.
 - Décisions de modélisation tracées : `docs/data-model.md §F`. Logs d'agents : `logs/2026-06-04__*`.
