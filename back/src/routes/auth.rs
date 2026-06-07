@@ -14,29 +14,53 @@ use axum::http::HeaderMap;
 use axum::Json;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::error::AppError;
+use crate::openapi::{ErrorBody, LogoutResponse, MeResponse};
 use crate::security::{self, AuthUser};
 use crate::state::AppState;
 
 /// Fenêtre des compteurs de rate-limit (les limites configurées sont « par minute »).
 const RATE_LIMIT_WINDOW_SECS: i64 = 60;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct LoginRequest {
+    #[schema(example = "sophie@agglo-riviera.fr")]
     pub email: String,
+    #[schema(example = "Quarity2026!")]
     pub password: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct TokenResponse {
+    /// JWT d'accès (HS256), à passer en `Authorization: Bearer <token>`.
     pub access_token: String,
+    /// Jeton opaque de rafraîchissement (rotation à chaque usage).
     pub refresh_token: String,
+    #[schema(example = "Bearer")]
     pub token_type: String,
+    /// Durée de vie de l'access token, en secondes.
+    #[schema(example = 900)]
     pub expires_in: i64,
 }
 
+/// Login : émet un couple access/refresh token.
+#[utoipa::path(
+    post,
+    path = "/api/auth/login",
+    tag = "auth",
+    request_body = LoginRequest,
+    responses(
+        (status = 200, description = "Authentification réussie", body = TokenResponse),
+        (status = 400, description = "Email ou mot de passe vide (corps `ErrorBody`) — ou JSON malformé (rejet de l'extracteur, corps texte)", body = ErrorBody),
+        (status = 401, description = "Identifiants invalides (`invalid_credentials`)", body = ErrorBody),
+        (status = 415, description = "`Content-Type` non JSON (rejet de l'extracteur, corps texte)"),
+        (status = 422, description = "Champs manquants ou mal typés (rejet de l'extracteur, corps texte)"),
+        (status = 429, description = "Rate-limit dépassé — par email ou par IP (`rate_limited`)", body = ErrorBody),
+    )
+)]
 pub async fn login(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -117,11 +141,26 @@ pub async fn login(
     }))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct RefreshRequest {
     pub refresh_token: String,
 }
 
+/// Refresh : rotation du refresh token + nouvel access token.
+#[utoipa::path(
+    post,
+    path = "/api/auth/refresh",
+    tag = "auth",
+    request_body = RefreshRequest,
+    responses(
+        (status = 200, description = "Nouveau couple de jetons (l'ancien refresh est révoqué)", body = TokenResponse),
+        (status = 400, description = "JSON malformé (rejet de l'extracteur, corps texte)"),
+        (status = 401, description = "Refresh token inconnu, expiré, ou compte désactivé (`invalid_refresh`)", body = ErrorBody),
+        (status = 415, description = "`Content-Type` non JSON (rejet de l'extracteur, corps texte)"),
+        (status = 422, description = "Champ `refresh_token` manquant ou mal typé (rejet de l'extracteur, corps texte)"),
+        (status = 429, description = "Rate-limit par IP dépassé (`rate_limited`)", body = ErrorBody),
+    )
+)]
 pub async fn refresh(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -192,7 +231,7 @@ pub async fn refresh(
     }))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct LogoutRequest {
     pub refresh_token: String,
 }
@@ -203,6 +242,20 @@ pub struct LogoutRequest {
 /// soit valide, inconnu ou appartienne à autrui — sinon le logout deviendrait un oracle
 /// permettant de tester la validité des refresh tokens d'autres utilisateurs.
 /// La tentative sur le token d'autrui est tracée (warn) côté serveur.
+#[utoipa::path(
+    post,
+    path = "/api/auth/logout",
+    tag = "auth",
+    request_body = LogoutRequest,
+    security(("bearer_jwt" = [])),
+    responses(
+        (status = 200, description = "Réponse identique que le token soit valide, inconnu ou à autrui (anti-oracle)", body = LogoutResponse),
+        (status = 400, description = "JSON malformé (rejet de l'extracteur, corps texte)"),
+        (status = 401, description = "Bearer manquant ou invalide", body = ErrorBody),
+        (status = 415, description = "`Content-Type` non JSON (rejet de l'extracteur, corps texte)"),
+        (status = 422, description = "Champ `refresh_token` manquant ou mal typé (rejet de l'extracteur, corps texte)"),
+    )
+)]
 pub async fn logout(
     State(state): State<AppState>,
     user: AuthUser,
@@ -224,6 +277,18 @@ pub async fn logout(
     Ok(Json(json!({ "status": "logged_out" })))
 }
 
+/// Identité de l'appelant (claims JWT + profil Postgres).
+#[utoipa::path(
+    get,
+    path = "/api/auth/me",
+    tag = "auth",
+    security(("bearer_jwt" = [])),
+    responses(
+        (status = 200, description = "Identité authentifiée", body = MeResponse),
+        (status = 401, description = "Bearer manquant, invalide ou expiré", body = ErrorBody),
+        (status = 404, description = "Utilisateur du JWT introuvable (`user_not_found`)", body = ErrorBody),
+    )
+)]
 pub async fn me(
     State(state): State<AppState>,
     user: AuthUser,

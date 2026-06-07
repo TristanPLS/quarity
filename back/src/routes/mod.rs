@@ -60,4 +60,8 @@ pub fn build_router(state: AppState) -> Router {
         .layer(TraceLayer::new_for_http())
         .layer(cors)
         .with_state(state)
+        // Doc OpenAPI (A2) — montée APRÈS les couches ci-dessus : la CSP API
+        // (`default-src 'none'`) casserait l'UI HTML/JS de Swagger. Le routeur docs
+        // porte ses propres en-têtes de sécurité (cf. `openapi::docs_router`).
+        .merge(crate::openapi::docs_router())
 }
