@@ -168,7 +168,7 @@ Travail en parallèle sur 4 axes.
 **Sécurité** :
 
 - [ ] Argon2id sur les mots de passe (pas bcrypt)
-- [ ] Validation `serde` + crate `validator` sur tous les inputs (seuils, plages de dates, coordonnées, intervalles autorisés)
+- [ ] Validation `serde` + crate `validator` sur tous les inputs (seuils, plages de dates, coordonnées, intervalles autorisés) *(socle posé le 2026-06-07 — backlog A5 : extracteurs `ValidatedJson`/`ValidatedQuery` + endpoints existants ; à étendre aux endpoints B6+)*
 - [ ] Paramètres préparés partout (anti-injection SQL ET ClickHouse — allowlist stricte des valeurs d'`interval`/`agg`/`parameter`)
 - [ ] CORS strict (allowlist des origins front)
 - [ ] Headers via tower-http : CSP, X-Frame-Options, HSTS

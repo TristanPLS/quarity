@@ -1,18 +1,21 @@
 //! GET /api/measurements — lecture ClickHouse, auth requise, isolation multi-tenant.
 
-use axum::extract::{Query, State};
+use axum::extract::State;
 use axum::Json;
 use serde::Deserialize;
 use serde_json::json;
 use utoipa::IntoParams;
+use validator::Validate;
 
 use crate::ch::validate_parameter;
 use crate::error::AppError;
 use crate::security::AuthUser;
 use crate::state::AppState;
+use crate::validation::{parse_datetime_ish, validate_datetime_ish, ValidatedQuery};
 
-#[derive(Deserialize, IntoParams)]
+#[derive(Deserialize, IntoParams, Validate)]
 #[into_params(parameter_in = Query)]
+#[validate(schema(function = "validate_date_range"))]
 pub struct MeasurementsQuery {
     /// Identifiant OpenAQ de la station — doit être suivie par l'org du JWT.
     #[param(example = 4085)]
@@ -20,16 +23,31 @@ pub struct MeasurementsQuery {
     /// Polluant (allowlist : `pm25`, `pm10`, `no2`, `o3`, `so2`, `co`).
     #[param(example = "pm25")]
     pub parameter: String,
-    /// Début de la plage (inclus), datetime « best effort » (ex. `2026-04-01` ou RFC 3339).
+    /// Début de la plage (inclus). Formats : `YYYY-MM-DD`, `YYYY-MM-DD[T ]HH:MM[:SS[.fff]]`, RFC 3339.
+    #[validate(custom(function = "validate_datetime_ish"))]
     #[param(example = "2026-04-01")]
     pub from: String,
-    /// Fin de la plage (exclue).
+    /// Fin de la plage (exclue), mêmes formats — doit être ≥ `from`.
+    #[validate(custom(function = "validate_datetime_ish"))]
     #[param(example = "2026-07-01")]
     pub to: String,
     /// Page 1-indexée (défaut : 1).
     pub page: Option<u32>,
     /// Taille de page, clampée à 1..=1000 (défaut : 100).
     pub page_size: Option<u32>,
+}
+
+/// Validation croisée : `from` ≤ `to` (l'égalité reste permise — plage vide valide,
+/// le front autorise from == to via ses attributs min/max). Ne se prononce que si les
+/// deux champs parsent — sinon les erreurs par champ suffisent.
+fn validate_date_range(q: &MeasurementsQuery) -> Result<(), validator::ValidationError> {
+    if let (Some(from), Some(to)) = (parse_datetime_ish(&q.from), parse_datetime_ish(&q.to)) {
+        if from > to {
+            return Err(validator::ValidationError::new("plage_invalide")
+                .with_message("`from` doit être antérieur ou égal à `to`".into()));
+        }
+    }
+    Ok(())
 }
 
 /// Mesures dédupliquées d'une station suivie par l'org de l'appelant.
@@ -41,7 +59,7 @@ pub struct MeasurementsQuery {
     security(("bearer_jwt" = [])),
     responses(
         (status = 200, description = "Page de mesures (tri `measured_at` décroissant)", body = crate::openapi::MeasurementsPage),
-        (status = 400, description = "`parameter` hors allowlist (corps `ErrorBody`) — ou paramètre de requête obligatoire manquant/mal typé (rejet de l'extracteur `Query`, corps texte)", body = crate::openapi::ErrorBody),
+        (status = 400, description = "`parameter` hors allowlist, dates `from`/`to` invalides ou `from` > `to` (corps `ErrorBody`) — ou paramètre de requête obligatoire manquant/mal typé (rejet de l'extracteur `Query`, corps texte)", body = crate::openapi::ErrorBody),
         (status = 401, description = "Bearer manquant, invalide ou expiré", body = crate::openapi::ErrorBody),
         (status = 403, description = "Station non suivie par l'org du JWT (`location_not_in_org`) — isolation multi-tenant", body = crate::openapi::ErrorBody),
     )
@@ -49,7 +67,7 @@ pub struct MeasurementsQuery {
 pub async fn list_measurements(
     State(state): State<AppState>,
     user: AuthUser,
-    Query(q): Query<MeasurementsQuery>,
+    ValidatedQuery(q): ValidatedQuery<MeasurementsQuery>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let parameter = validate_parameter(&q.parameter).ok_or(AppError::BadRequest(
         "parameter invalide (allowlist : pm25, pm10, no2, o3, so2, co)".into(),

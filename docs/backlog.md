@@ -2,7 +2,7 @@
 
 > Vue d'ensemble vivante : ce qui est **fait/validé**, la **dette connue**, et les **missions à venir** par priorité.
 > Complète [`roadmap.md`](../roadmap.md) (le plan) avec l'avancement réel. Trace d'audit détaillée : [`logs/`](../logs/).
-> Dernière mise à jour : 2026-06-07 (lots post-revue mergés : auth durcie #14, ingestion robuste #15, migrations sqlx #16 — critiques n°1 et n°2 de la revue du 06/06 résolues ; A2 doc OpenAPI livrée en fin de journée).
+> Dernière mise à jour : 2026-06-07 (lots post-revue mergés : auth durcie #14, ingestion robuste #15, migrations sqlx #16 — critiques n°1 et n°2 de la revue du 06/06 résolues ; A2 doc OpenAPI et A5 validation des inputs livrées en fin de journée).
 
 ---
 
@@ -19,7 +19,7 @@ README, AGENTS.md, CONTRIBUTING.md, roadmap, pitch, identité, logs. *(Repo Git 
 
 ### Jalon 2 — Walking skeleton *(branches `feature/infra-*`, `feature/back-*`, front/ingest dans le working tree)*
 - **`docker-compose.yml`** : 5 services (postgres, clickhouse, redis, back, front) + one-shot `seed`/`ingest` sous profils + healthchecks + `depends_on: service_healthy`. Schéma ClickHouse auto-chargé (initdb.d) ; schéma Postgres appliqué par les **migrations sqlx au boot du back** (PR #16). `.env.example` propre.
-- **Back Rust/Axum** (`back/`) : auth JWT (Argon2id + refresh Redis), `GET /api/measurements` (ClickHouse, **isolation multi-tenant**, allowlist anti-injection), `/health`. Compile ; 9/9 vérifications manuelles le 04/06 ; **18 tests e2e versionnés + CI GitHub Actions** (12 le 05/06 + 3 au durcissement auth + 3 à la doc OpenAPI le 07/06 — back/tests/e2e.rs, .github/workflows/ci.yml).
+- **Back Rust/Axum** (`back/`) : auth JWT (Argon2id + refresh Redis), `GET /api/measurements` (ClickHouse, **isolation multi-tenant**, allowlist anti-injection), `/health`. Compile ; 9/9 vérifications manuelles le 04/06 ; **22 tests e2e versionnés + CI GitHub Actions** (12 le 05/06 + 3 au durcissement auth + 3 à la doc OpenAPI + 4 à la validation des inputs le 07/06 — back/tests/e2e.rs, .github/workflows/ci.yml).
 - **Front React/Vite** (`front/`) : login + dashboard série temporelle (recharts), charte `identity.md`, nginx + proxy `/api`. Build + typecheck OK, stack 5 services validé.
 - **Ingestion OpenAQ** (`back/src/bin/ingest.rs`) : station réelle → ClickHouse + liaison org. Service compose `--profile ingest`. **287 mesures réelles** validées end-to-end (NICE PROMENADE #4085) *(API v3 uniquement — backfill S3 restant, cf. A6)*.
 
@@ -51,7 +51,7 @@ README, AGENTS.md, CONTRIBUTING.md, roadmap, pitch, identité, logs. *(Repo Git 
 - [x] **A2** Doc **OpenAPI `/api/docs`** (utoipa + utoipa-swagger-ui `vendored`) — ✅ livré 2026-06-07 (logs/2026-06-07__agent-back__a2-openapi-utoipa.md) : 6 routes documentées, schéma bearer JWT, CSP dédiée à l'UI, +3 tests e2e (18 au total). *Reste : capture Swagger dans `docs/captures/` après merge (solde le reliquat d'A1).*
 - [x] **A3** **CORS strict** (allowlist origins front) + **headers sécurité** (CSP, HSTS, X-Frame) via tower-http. — ✅ livré 2026-06-05 (logs/2026-06-05__agent-back__cors-headers.md ; la CSP du SPA côté nginx a été posée via A1 le 2026-06-07)
 - [x] **A4** **Rate-limit Redis** (login par email + IP, refresh par IP — fenêtre fixe). — ✅ livré 2026-06-07 (PR #14, logs/2026-06-06__agent-back__auth-hardening.md). *Reste (→ B9) : token bucket généralisé + quota par clé API.*
-- [ ] **A5** Validation des inputs au boundary (crate `validator`).
+- [x] **A5** Validation des inputs au boundary (crate `validator`). — ✅ livré 2026-06-07 (logs/2026-06-07__agent-back__a5-input-validation.md) : extracteurs `ValidatedJson`/`ValidatedQuery` (échec → 400 `ErrorBody`, rejets axum inchangés), bornes login/refresh/logout (password ≤ 512 — anti-DoS Argon2), dates `from`/`to` validées + plage (avant : date arbitraire → 500 ClickHouse), +8 tests (36 au total : 14 unitaires + 22 e2e). *À étendre aux endpoints B6+ au fil de l'eau.*
 - [ ] **A6** Ingestion : **ordonnancement périodique** (cron/scheduler) + **backfill S3**. *(pagination/retry ✅ livrés 2026-06-07 — PR #15, logs/2026-06-06__agent-infra__ingest-robustesse.md ; idempotence déjà assurée par ReplacingMergeTree + upserts, confirmée comme sémantique de reprise)*
 - [x] **A7** **CI minimale** : clippy + fmt + `cargo test` + `npm run build` + `docker build` ; ≥ 1 test d'intégration ; **test d'isolation cross-tenant**. (Roadmap la met au Jalon 4 — la remonter ici réduit la dette.) — ✅ livré 2026-06-05 (logs/2026-06-05__agent-back__cross-tenant-tests-ci.md : 12 tests e2e + ci.yml)
 

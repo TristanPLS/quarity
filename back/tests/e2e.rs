@@ -401,6 +401,87 @@ async fn invalid_parameter_is_bad_request() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Validation au boundary (A5 — crate validator)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// A5 : un mot de passe démesuré est rejeté AVANT la vérification Argon2 (anti-DoS).
+#[tokio::test]
+async fn login_overlong_password_is_bad_request() {
+    let base = spawn_app().await;
+    let (status, body) = login(&base, "sophie@agglo-riviera.fr", &"x".repeat(600)).await;
+    assert_eq!(
+        status, 400,
+        "un mot de passe > 512 caractères doit être rejeté en 400 (validation, pas Argon2)"
+    );
+    assert_eq!(
+        body.expect("corps 400")["error"],
+        "bad_request",
+        "le corps doit porter le code stable `bad_request` (ErrorBody)"
+    );
+}
+
+/// A5 : une date `from` arbitraire est rejetée en 400 au boundary.
+/// (Avant A5, elle traversait jusqu'à ClickHouse et ressortait en 500.)
+#[tokio::test]
+async fn measurements_garbage_date_is_bad_request() {
+    let base = spawn_app().await;
+    let token = access_token(&base, "sophie@agglo-riviera.fr").await;
+    let res = reqwest::Client::new()
+        .get(format!(
+            "{base}/api/measurements?location_id=1001&parameter=pm25&from=n-importe-quoi&to=2026-07-01"
+        ))
+        .bearer_auth(token)
+        .send()
+        .await
+        .expect("requête measurements");
+    assert_eq!(
+        res.status().as_u16(),
+        400,
+        "une date invalide doit donner 400, jamais 500"
+    );
+    let body = res.json::<Value>().await.expect("corps 400");
+    assert_eq!(
+        body["error"], "bad_request",
+        "le corps doit porter le code stable `bad_request` (ErrorBody)"
+    );
+}
+
+/// A5 : `from` strictement postérieur à `to` → 400 (l'égalité reste permise,
+/// le front autorise from == to).
+#[tokio::test]
+async fn measurements_inverted_range_is_bad_request() {
+    let base = spawn_app().await;
+    let token = access_token(&base, "sophie@agglo-riviera.fr").await;
+    let status = reqwest::Client::new()
+        .get(format!(
+            "{base}/api/measurements?location_id=1001&parameter=pm25&from=2026-07-01&to=2026-04-01"
+        ))
+        .bearer_auth(token)
+        .send()
+        .await
+        .expect("requête measurements")
+        .status()
+        .as_u16();
+    assert_eq!(status, 400, "from > to doit être rejeté en 400");
+}
+
+/// A5 : un refresh_token vide est rejeté par la validation (400 ErrorBody),
+/// sans aller interroger Redis.
+#[tokio::test]
+async fn refresh_empty_token_is_bad_request() {
+    let base = spawn_app().await;
+    let res = reqwest::Client::new()
+        .post(format!("{base}/api/auth/refresh"))
+        .json(&json!({ "refresh_token": "" }))
+        .send()
+        .await
+        .expect("requête refresh");
+    assert_eq!(res.status().as_u16(), 400);
+    let body = res.json::<Value>().await.expect("corps 400");
+    assert_eq!(body["error"], "bad_request");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Doc OpenAPI /api/docs (A2)
 // ─────────────────────────────────────────────────────────────────────────────
 
