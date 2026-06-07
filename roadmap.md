@@ -118,7 +118,7 @@ Tables minimales : `organizations`, `users`, `roles`, `memberships`, `subscripti
 - [X] **Endpoint walking skeleton** : `GET /api/measurements?location_id=…&parameter=pm25&from=…&to=…` → query ClickHouse → JSON paginé
 - [X] **Auth JWT** minimale : login (Postgres user lookup + Argon2id) + refresh token (Redis)
 - [X] **Écran front minimal** : login + série temporelle d'un lieu filtrable
-- [ ] **Doc API auto-générée** accessible à `/api/docs` (utoipa pour Axum) *(différée → backlog A2)*
+- [X] **Doc API auto-générée** accessible à `/api/docs` (utoipa pour Axum) *(livrée le 2026-06-07 — backlog A2)*
 - [ ] Test en clonant le repo sur un autre poste : `docker compose up` doit suffire
 
 **Livrable** : un user loggé voit des mesures OpenAQ réelles. C'est moche mais ça prouve que l'archi tient.

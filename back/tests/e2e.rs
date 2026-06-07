@@ -401,6 +401,125 @@ async fn invalid_parameter_is_bad_request() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Doc OpenAPI /api/docs (A2)
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn api_docs_serves_swagger_ui() {
+    let base = spawn_app().await;
+    let res = reqwest::Client::new()
+        .get(format!("{base}/api/docs/"))
+        .send()
+        .await
+        .expect("requête /api/docs/");
+    assert_eq!(res.status().as_u16(), 200);
+
+    let headers = res.headers().clone();
+    let ct = headers
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    assert!(
+        ct.starts_with("text/html"),
+        "content-type HTML attendu : {ct}"
+    );
+
+    // Le routeur docs porte SA PROPRE CSP (pas la CSP API `default-src 'none'`,
+    // qui bloquerait les scripts/styles de l'UI) + les autres en-têtes durcis.
+    let csp = headers
+        .get("content-security-policy")
+        .and_then(|v| v.to_str().ok())
+        .expect("CSP attendue sur la doc");
+    assert!(
+        csp.contains("script-src 'self'"),
+        "CSP docs doit autoriser les scripts same-origin : {csp}"
+    );
+    assert_eq!(headers.get("x-content-type-options").unwrap(), "nosniff");
+    assert_eq!(headers.get("x-frame-options").unwrap(), "DENY");
+
+    let body = res.text().await.expect("corps HTML");
+    assert!(
+        body.contains("swagger-ui"),
+        "la page doit embarquer Swagger UI (assets vendored)"
+    );
+}
+
+#[tokio::test]
+async fn api_docs_redirects_to_trailing_slash() {
+    let base = spawn_app().await;
+    // Client SANS suivi de redirection : on veut observer la redirection elle-même.
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .expect("client sans redirect");
+    let res = client
+        .get(format!("{base}/api/docs"))
+        .send()
+        .await
+        .expect("requête /api/docs");
+    assert!(
+        res.status().is_redirection(),
+        "/api/docs doit rediriger vers /api/docs/ : {}",
+        res.status()
+    );
+    assert_eq!(
+        res.headers().get("location").and_then(|v| v.to_str().ok()),
+        Some("/api/docs/")
+    );
+}
+
+#[tokio::test]
+async fn openapi_json_is_complete() {
+    let base = spawn_app().await;
+    let res = reqwest::Client::new()
+        .get(format!("{base}/api/docs/openapi.json"))
+        .send()
+        .await
+        .expect("requête openapi.json");
+    assert_eq!(res.status().as_u16(), 200);
+    let spec = res.json::<Value>().await.expect("spec JSON");
+
+    assert!(
+        spec["openapi"].as_str().unwrap_or("").starts_with("3."),
+        "version OpenAPI 3.x attendue : {:?}",
+        spec["openapi"]
+    );
+    assert_eq!(spec["info"]["title"], "Quarity API");
+
+    // Les 6 routes du walking skeleton doivent être documentées.
+    for path in [
+        "/health",
+        "/api/auth/login",
+        "/api/auth/refresh",
+        "/api/auth/logout",
+        "/api/auth/me",
+        "/api/measurements",
+    ] {
+        assert!(
+            spec["paths"][path].is_object(),
+            "chemin {path} absent de la spec"
+        );
+    }
+
+    // Schéma de sécurité bearer JWT déclaré et référencé par les routes protégées.
+    let scheme = &spec["components"]["securitySchemes"]["bearer_jwt"];
+    assert_eq!(scheme["type"], "http");
+    assert_eq!(scheme["scheme"], "bearer");
+    assert!(
+        spec["paths"]["/api/measurements"]["get"]["security"]
+            .as_array()
+            .is_some_and(|s| !s.is_empty()),
+        "GET /api/measurements doit exiger bearer_jwt"
+    );
+
+    // L'isolation multi-tenant (403) est un invariant : elle doit être documentée.
+    assert!(
+        spec["paths"]["/api/measurements"]["get"]["responses"]["403"].is_object(),
+        "la réponse 403 (isolation multi-tenant) doit être documentée"
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // CORS & en-têtes de sécurité (A3)
 // ─────────────────────────────────────────────────────────────────────────────
 

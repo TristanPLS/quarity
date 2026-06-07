@@ -6,6 +6,15 @@ use serde_json::json;
 
 use crate::state::AppState;
 
+/// Liveness + readiness des 3 dépendances (Postgres, ClickHouse, Redis).
+#[utoipa::path(
+    get,
+    path = "/health",
+    tag = "health",
+    responses(
+        (status = 200, description = "`status` vaut `ok` si les 3 dépendances répondent, `degraded` sinon (le code HTTP reste 200)", body = crate::openapi::HealthResponse),
+    )
+)]
 pub async fn health(State(state): State<AppState>) -> Json<serde_json::Value> {
     let pg = crate::db::ping(&state.pg).await.is_ok();
     let ch = state.ch.ping().await.is_ok();

@@ -22,13 +22,18 @@ pub enum ClickhouseError {
     Json(#[from] serde_json::Error),
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, utoipa::ToSchema)]
 pub struct MeasurementRow {
+    #[schema(example = 4085)]
     pub location_id: u64,
     pub sensor_id: u64,
+    #[schema(example = "pm25")]
     pub parameter: String,
+    #[schema(example = "µg/m³")]
     pub unit: String,
+    /// Horodatage UTC de la mesure (`YYYY-MM-DD hh:mm:ss.fff`).
     pub measured_at: String,
+    /// Valeur dédupliquée (dernière ingestion : `argMax(value, ingested_at)`).
     pub value: f64,
 }
 

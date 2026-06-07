@@ -33,7 +33,7 @@ docker compose up -d
 Le walking skeleton (Jalon 2) est livré :
 
 - Front : http://localhost:3000
-- Doc API (Swagger / OpenAPI via utoipa) : *à venir (backlog A2 — non implémentée à ce jour)*
+- Doc API (Swagger / OpenAPI via utoipa) : http://localhost:3000/api/docs *(servie par le back, proxy nginx `/api`)*
 
 ## Équipe
 
