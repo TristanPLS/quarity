@@ -155,6 +155,8 @@ Un lieu peut agréger plusieurs stations mesurant le même polluant (ex. « Cent
 ## E. Invariants hors-schéma → triggers & procédures (JALON 3)
 
 > ✅ **Livrés le 2026-06-07** (backlog B1–B3) : T1–T6 dans [`back/migrations/0003_triggers.sql`](../back/migrations/0003_triggers.sql), P1–P3 dans [`back/migrations/0004_procedures.sql`](../back/migrations/0004_procedures.sql) (+ vues B1 dans `0002_business_views.sql`). Tests : `back/tests/db.rs`. Nuances d'implémentation : T4 autorise les transitions **vers NULL** d'`alert_rule_id`/`tracked_location_id` (FK `ON DELETE SET NULL` — le SET NULL référentiel passe par le trigger d'UPDATE) ; P3 est la moitié **transactionnelle** (l'agrégat fenêtré ClickHouse arrive avec B9).
+>
+> ✅ **B5 livré le 2026-06-07** (volet ClickHouse du Jalon 3) : moyennes glissantes réglementaires + AQI US EPA dans [`db/clickhouse/queries/rolling_regulatory.sql`](../db/clickhouse/queries/rolling_regulatory.sql) — Q1 fenêtres 24 h/8 h/1 h + couverture EPA 75 %, Q2 AQI instantané + polluant dominant (CTE miroir des `aqi_breakpoints` Postgres, conversion ppb figée D4.2 : 25 °C/1 atm, Vm = 24.45), Q3 O₃ max journalier de la moyenne 8 h, Q4 NO₂ moyenne annuelle (**exception documentée** à la règle « jamais les rollups » : lue depuis `measurements_daily`, le TTL 90 j des bruts rendant l'annuel impossible). Tests : `back/tests/ch.rs` (13, autonomes). Nuances : requêtes **mono-station** (l'agrégation multi-stations MAX du §D.5 s'applique au-dessus) ; so2/co exclus de l'AQI (aucun breakpoint seedé).
 
 Règles métier non exprimables par contrainte déclarative (tracées dans `back/migrations/0001_init.sql §8` — fichier gelé, l'implémentation vit dans 0003/0004) :
 
