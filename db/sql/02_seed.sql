@@ -20,6 +20,19 @@ TRUNCATE
     organization_subscriptions, subscription_plans, memberships, roles, users, organizations
 RESTART IDENTITY CASCADE;
 
+-- alert_events_archive (migration 0004, Jalon 3) peut ne pas exister encore au
+-- premier seed (le back n'a pas booté) : purge conditionnelle.
+DO $$ BEGIN
+    IF to_regclass('alert_events_archive') IS NOT NULL THEN
+        EXECUTE 'TRUNCATE alert_events_archive';
+    END IF;
+END $$;
+
+-- NB triggers (migration 0003, Jalon 3) : les INSERT ci-dessous DÉCLENCHENT
+-- T2/T3 (cohérence org — le seed est conforme), T5 (audit auto des alert_rules)
+-- et T6 (compteur de non-lus). TRUNCATE ne déclenche aucun trigger ROW, mais
+-- organizations est retronquée en même temps qu'alert_events → compteurs repartent à 0, cohérents.
+
 -- --- Référentiels indépendants du tenant -------------------------------------
 
 -- roles (US-09)
@@ -225,18 +238,25 @@ JOIN tracked_locations tl ON tl.name = v.loc_name
 JOIN ref_locations rl     ON rl.openaq_location_id = v.openaq_loc;
 
 -- alert_rules (org_id dénormalisé pour l'isolation ; 1 inactive pour prouver le filtre Moka)
+-- 'Seuil O3' est semée ACTIVE puis désactivée par UPDATE ci-dessous : depuis la
+-- migration 0003 (T5), c'est le trigger qui écrit l'audit — le seed exerce ainsi
+-- le vrai chemin create→deactivate au lieu d'insérer l'audit à la main.
 INSERT INTO alert_rules (org_id, tracked_location_id, parameter_id, comparator, threshold_value, severity, status, name, created_by)
 SELECT tl.org_id, tl.id, p.id, v.cmp, v.thr, v.sev, v.status, v.name, u.id
 FROM (VALUES
-    ('École Jules-Ferry', 'pm25', '>',  15.0, 'warning',  'active',   'Seuil enfants PM2.5',     'karim@agglo-riviera.fr'),
-    ('Centre-ville',      'no2',  '>=', 40.0, 'critical', 'active',   'Seuil NO2 réglementaire', 'sophie@agglo-riviera.fr'),
-    ('Axe A8',            'o3',   '>',  120.0,'critical', 'inactive', 'Seuil O3 (désactivé)',    'sophie@agglo-riviera.fr'),
-    ('Site Lyon',         'pm25', '>',  25.0, 'critical', 'active',   'PM2.5 site Lyon',         'thomas@groupeindus.com'),
-    ('Site Anvers',       'pm25', '>',  25.0, 'warning',  'active',   'PM2.5 site Anvers',       'thomas@groupeindus.com')
+    ('École Jules-Ferry', 'pm25', '>',  15.0, 'warning',  'active', 'Seuil enfants PM2.5',     'karim@agglo-riviera.fr'),
+    ('Centre-ville',      'no2',  '>=', 40.0, 'critical', 'active', 'Seuil NO2 réglementaire', 'sophie@agglo-riviera.fr'),
+    ('Axe A8',            'o3',   '>',  120.0,'critical', 'active', 'Seuil O3 (désactivé)',    'sophie@agglo-riviera.fr'),
+    ('Site Lyon',         'pm25', '>',  25.0, 'critical', 'active', 'PM2.5 site Lyon',         'thomas@groupeindus.com'),
+    ('Site Anvers',       'pm25', '>',  25.0, 'warning',  'active', 'PM2.5 site Anvers',       'thomas@groupeindus.com')
 ) AS v(loc_name, param_code, cmp, thr, sev, status, name, email)
 JOIN tracked_locations tl ON tl.name = v.loc_name
 JOIN parameters p         ON p.code = v.param_code
 JOIN users u              ON u.email = v.email;
+
+-- Désactivation APRÈS coup → T5 (0003) journalise le 'deactivate' dans audit_log.
+-- (Avant 0003 : UPDATE sans effet d'audit — le seed reste valide sur un schéma 0001 nu.)
+UPDATE alert_rules SET status = 'inactive' WHERE name = 'Seuil O3 (désactivé)';
 
 -- alert_rule_recipients (teste le CHECK « exactement une cible »)
 INSERT INTO alert_rule_recipients (alert_rule_id, channel, user_id, email)
@@ -309,14 +329,10 @@ JOIN exposure_profiles ep   ON ep.id = tlp.exposure_profile_id
 JOIN parameters p           ON p.code = 'pm25'
 JOIN exposure_thresholds et ON et.exposure_profile_id = ep.id AND et.parameter_id = p.id;
 
--- audit_log (alimente le trigger Jalon 3 + timeline ESG)
-INSERT INTO audit_log (org_id, actor_user_id, entity_type, entity_id, action, diff)
-SELECT ar.org_id, ar.created_by, 'alert_rule', ar.id, v.action, v.diff::jsonb
-FROM (VALUES
-    ('Seuil enfants PM2.5', 'create',     '{"threshold_value": 15.0}'),
-    ('Seuil O3 (désactivé)','deactivate', '{"status": {"from": "active", "to": "inactive"}}')
-) AS v(rule_name, action, diff)
-JOIN alert_rules ar ON ar.name = v.rule_name;
+-- audit_log : PLUS d'insert manuel depuis la migration 0003 — le trigger T5
+-- journalise lui-même les INSERT (create) et la désactivation O3 (deactivate)
+-- effectués plus haut. Sur un schéma 0001 nu (sans triggers), audit_log reste
+-- simplement vide après seed.
 
 COMMIT;
 

@@ -2,7 +2,7 @@
 
 > Vue d'ensemble vivante : ce qui est **fait/validé**, la **dette connue**, et les **missions à venir** par priorité.
 > Complète [`roadmap.md`](../roadmap.md) (le plan) avec l'avancement réel. Trace d'audit détaillée : [`logs/`](../logs/).
-> Dernière mise à jour : 2026-06-07 (lots post-revue mergés : auth durcie #14, ingestion robuste #15, migrations sqlx #16 — critiques n°1 et n°2 de la revue du 06/06 résolues ; A2 doc OpenAPI et A5 validation des inputs livrées en fin de journée).
+> Dernière mise à jour : 2026-06-07 (A2 doc OpenAPI et A5 validation des inputs mergées ; **Jalon 3 BDD ouvert et livré : B1–B4** — vues, triggers T1–T6, procédures P1–P3, requête complexe — B5 ClickHouse reste à venir).
 
 ---
 
@@ -57,10 +57,10 @@ README, AGENTS.md, CONTRIBUTING.md, roadmap, pitch, identité, logs. *(Repo Git 
 
 ### B. Jalon 3 — Profondeur fonctionnelle
 **BDD** (cf. `docs/data-model.md §E`) :
-- [ ] **B1** 2 vues métier (`org_active_zones_view`, `org_alert_stats_view`).
-- [ ] **B2** Triggers T1–T6 : ≥1 station/lieu, cohérence `org_id` sur `alert_rules`, destinataire ∈ org, **immuabilité `alert_events`**, audit `alert_rules`, compteur non-lus.
-- [ ] **B3** 3 procédures (`create_tracked_location_with_rules`, `archive_old_alert_events`, `compute_exposure_dose`) + 1 transaction avec ROLLBACK testé.
-- [ ] **B4** Requête complexe (`db/sql/queries/complex_business_query.sql`).
+- [x] **B1** 2 vues métier (`org_active_zones_view`, `org_alert_stats_view`). — ✅ livré 2026-06-07 (migration `0002_business_views.sql` ; logs/2026-06-07__agent-bdd__jalon3-b1-b4.md)
+- [x] **B2** Triggers T1–T6 : ≥1 station/lieu, cohérence `org_id` sur `alert_rules`, destinataire ∈ org, **immuabilité `alert_events`**, audit `alert_rules`, compteur non-lus. — ✅ livré 2026-06-07 (migration `0003_triggers.sql` + colonne `organizations.unread_alert_count` ; CI adaptée pour boucler sur les migrations)
+- [x] **B3** 3 procédures (`create_tracked_location_with_rules`, `archive_old_alert_events`, `compute_exposure_dose`) + 1 transaction avec ROLLBACK testé. — ✅ livré 2026-06-07 (migration `0004_procedures.sql` + table `alert_events_archive` ; ROLLBACK prouvé dans back/tests/db.rs::p1_creates_everything_and_explicit_rollback_leaves_no_trace ; P3 = moitié transactionnelle, l'agrégat ClickHouse arrive avec B9)
+- [x] **B4** Requête complexe (`db/sql/queries/complex_business_query.sql`). — ✅ livré 2026-06-07 (CTE + 4 jointures + GROUP BY + HAVING, exécutée par les tests)
 - [ ] **B5** ClickHouse : MV rollup maintenue, **moyennes glissantes réglementaires** (`db/clickhouse/queries/rolling_regulatory.sql`), calcul **AQI** via breakpoints.
 
 **Back** :
