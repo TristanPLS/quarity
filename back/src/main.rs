@@ -29,6 +29,15 @@ async fn main() -> anyhow::Result<()> {
         .await
         .context("connexion aux dépendances (Postgres/Redis/ClickHouse)")?;
 
+    // Migrations Postgres (back/migrations/, embarquées à la compilation) : le schéma
+    // DOIT être à jour AVANT de servir. Échec = erreur fatale (on ne démarre jamais
+    // sur un schéma incomplet ou divergent).
+    sqlx::migrate!("./migrations")
+        .run(&state.pg)
+        .await
+        .context("application des migrations Postgres (back/migrations) — démarrage refusé")?;
+    tracing::info!("migrations Postgres appliquées (_sqlx_migrations à jour)");
+
     let app = routes::build_router(state);
 
     let listener = tokio::net::TcpListener::bind(&cfg.bind_addr)

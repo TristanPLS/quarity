@@ -17,6 +17,7 @@ sqlx = { version = "0.8", default-features = false, features = [
     "tls-rustls-ring-webpki",
     "postgres",
     "macros",            # uniquement pour #[derive(FromRow)]
+    "migrate",           # migrations embarquées (sqlx::migrate! sur back/migrations/, appliquées au boot)
 ] }
 
 # --- Redis (refresh tokens) ---

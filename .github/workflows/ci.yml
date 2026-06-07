@@ -81,10 +81,11 @@ jobs:
           workspaces: back
 
       - name: Charger schéma + seed Postgres
+        # Schéma = migration sqlx 0001 (source de vérité — db/sql/01_schema.sql n'est plus qu'un pointeur).
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends postgresql-client
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/sql/01_schema.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f back/migrations/0001_init.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/sql/02_seed.sql
 
       - name: Charger schéma + seed ClickHouse
