@@ -9,7 +9,7 @@
 ## ✅ Fait & validé
 
 ### Jalon 0 — Cadrage
-README, AGENTS.md, CONTRIBUTING.md, roadmap, pitch, identité, logs. *(Repo Git + branches `dev` créées en cours de route.)* **Clos le 2026-06-06** : board GitHub Projects (https://github.com/users/TristanPLS/projects/1), protections master/dev (PR + CI verte obligatoires), templates PR/issue dans .github/. **Process solo acté** : la CI remplace la review humaine.
+README, AGENTS.md, CONTRIBUTING.md, roadmap, pitch, identité, logs. *(Repo Git + branches `dev` créées en cours de route.)* **Clos le 2026-06-06** : board GitHub Projects (https://github.com/users/TristanPLS/projects/1 — rempli depuis le backlog le 2026-06-07, 28 items), protections master/dev (PR + CI verte obligatoires), templates PR/issue dans .github/. **Process solo acté** : la CI remplace la review humaine.
 
 ### Jalon 1 — Modélisation *(branche `feature/bdd-jalon1-modelisation`)*
 - Personas (5), user stories (16) + **MoSCoW** — `docs/personas.md`, `docs/user-stories.md`.
@@ -38,7 +38,7 @@ README, AGENTS.md, CONTRIBUTING.md, roadmap, pitch, identité, logs. *(Repo Git 
 |---|---|---|
 | D1 | **Structure du dépôt** | ✅ **Corrigé le 2026-06-05** (log coordinateur) : README/roadmap/logs rapatriés dans app/ ; AGENTS.md et CONTRIBUTING.md volontairement hors dépôt (décision actée). |
 | D2 | **Port Postgres natif** | Un Postgres natif occupe `localhost:5432` sur le poste de dev → lancer avec ports hauts (`POSTGRES_PORT=55432 …`). À documenter pour les devs. |
-| D3 | **Secrets** | `.env` jamais committé (gitignoré). **Clé OpenAQ de dev à régénérer** (exposée en session — toujours en attente). `JWT_SECRET` ✅ généré localement le 2026-06-07 (64 hex aléatoires ; la validation au boot a bien refusé le placeholder). |
+| D3 | **Secrets** | ✅ **Soldée le 2026-06-07** : `.env` jamais committé (gitignoré) ; clé OpenAQ régénérée (l'ancienne, exposée, révoquée) puis ré-ingestion validée (231 mesures Nice) ; `JWT_SECRET` généré (64 hex aléatoires — la validation au boot a bien refusé le placeholder). |
 | D4 | **Seed = hash démo partagé** | Tous les comptes démo ont le mot de passe `Quarity2026!`. À ne pas reproduire en prod. |
 | D5 | **CORS permissif** | ✅ **Corrigé le 2026-06-05** (mission A3) : CORS allowlist strict + headers sécurité en place (routes/mod.rs). |
 
@@ -47,7 +47,7 @@ README, AGENTS.md, CONTRIBUTING.md, roadmap, pitch, identité, logs. *(Repo Git 
 ## 🎯 Prochaines missions (par priorité)
 
 ### A. Finir le Jalon 2 / durcissement (court terme)
-- [x] **A1** Vérif visuelle du front (navigateur) + 1ʳᵉˢ **captures** dans `docs/captures/` + **CSP nginx** posée et validée (0 violation console). — ✅ livré 2026-06-07 (logs/2026-06-07__agent-front__a1-verif-visuelle-csp.md ; captures app : login + dashboard). *Reste : capture du board (session GitHub — humain) ; capture Swagger viendra avec A2.*
+- [x] **A1** Vérif visuelle du front (navigateur) + 1ʳᵉˢ **captures** dans `docs/captures/` + **CSP nginx** posée et validée (0 violation console). — ✅ livré 2026-06-07 (logs/2026-06-07__agent-front__a1-verif-visuelle-csp.md ; captures : login, dashboard démo, dashboard **données réelles Nice #4085**, board GitHub rempli — 28 items). *Reste : capture Swagger, viendra avec A2.*
 - [ ] **A2** Doc **OpenAPI `/api/docs`** (utoipa + utoipa-swagger-ui `vendored`) — différée volontairement, à ajouter.
 - [x] **A3** **CORS strict** (allowlist origins front) + **headers sécurité** (CSP, HSTS, X-Frame) via tower-http. — ✅ livré 2026-06-05 (logs/2026-06-05__agent-back__cors-headers.md ; la CSP du SPA côté nginx a été posée via A1 le 2026-06-07)
 - [x] **A4** **Rate-limit Redis** (login par email + IP, refresh par IP — fenêtre fixe). — ✅ livré 2026-06-07 (PR #14, logs/2026-06-06__agent-back__auth-hardening.md). *Reste (→ B9) : token bucket généralisé + quota par clé API.*
