@@ -142,10 +142,10 @@ Travail en parallèle sur 4 axes.
 
 **ClickHouse** :
 
-- [ ] `MATERIALIZED VIEW` de rollup maintenue en continu (jour × ville × polluant)
-- [ ] **Moyennes glissantes réglementaires** via window functions : O₃ max journalier de la moyenne 8 h, PM2.5 moyenne 24 h, NO₂ moyenne annuelle — fichier `db/clickhouse/queries/rolling_regulatory.sql`
-- [ ] Calcul **AQI** (concentration → catégorie) via table de breakpoints
-- [ ] Table avec TTL purgeant les mesures brutes > 90 jours
+- [X] `MATERIALIZED VIEW` de rollup maintenue en continu (jour × ville × polluant) *(en place dès le Jalon 1 : `mv_measurements_hourly`/`_daily` — granularité **station** : la « ville » n'existe pas dans le schéma ClickHouse, l'agrégation par lieu vit côté Postgres via `tracked_location_stations` ; validées et consommées par B5 — Q4)*
+- [X] **Moyennes glissantes réglementaires** via window functions : O₃ max journalier de la moyenne 8 h, PM2.5 moyenne 24 h, NO₂ moyenne annuelle — fichier `db/clickhouse/queries/rolling_regulatory.sql` *(2026-06-07 — backlog B5 : Q1 pm25/pm10 24 h + o3 8 h + no2 1 h avec couverture EPA 75 %, Q3 O₃ max journalier 8 h, Q4 NO₂ moyenne annuelle — depuis `measurements_daily`, les bruts ne vivant que 90 j)*
+- [X] Calcul **AQI** (concentration → catégorie) via table de breakpoints *(2026-06-07 — backlog B5 : Q2 `aqi_snapshot`, miroir verbatim des `aqi_breakpoints` Postgres, troncature + interpolation EPA, conversion ppb figée D4.2, polluant dominant)*
+- [X] Table avec TTL purgeant les mesures brutes > 90 jours *(en place dès le Jalon 1 — `01_schema.sql` : TTL 90 j, `ttl_only_drop_parts=1`)*
 - [ ] Une requête d'agrégation lourde benchmark : gain ClickHouse vs Postgres équivalent
 
 ### Axe back

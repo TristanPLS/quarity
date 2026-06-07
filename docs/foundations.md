@@ -132,6 +132,9 @@ dispositif réglementaire certifié.
 ### À confirmer
 - Table de conversion de référence (ppb↔µg/m³ dépend de la masse molaire et des conditions T/P) — figer les
   hypothèses (ex. 25 °C, 1 atm) et les documenter.
+  **✅ Figé le 2026-06-07 (B5)** : 25 °C / 1 atm, volume molaire Vm = 24.45 L/mol — `ppb = µg/m³ × 24.45 / M`,
+  avec M(O₃) = 48.00 et M(NO₂) = 46.01 g/mol. Documenté et appliqué dans
+  `db/clickhouse/queries/rolling_regulatory.sql` (Q2 `aqi_snapshot`).
 
 ---
 
