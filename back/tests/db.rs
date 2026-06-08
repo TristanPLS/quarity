@@ -807,3 +807,95 @@ async fn complex_business_query_runs_and_orders_correctly() {
         "groupeindus (2 alertes critiques au seed) doit ressortir"
     );
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// T7 — cohérence alert_events.org_id avec ses référents (lieu suivi / règle)
+// (durcissement post-analyse 2026-06-08 — migration 0005)
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn t7_alert_event_with_foreign_tracked_location_is_rejected() {
+    let pool = pool().await;
+    let mut tx = pool.begin().await.unwrap();
+    let cityair = org_id(&mut tx, "cityair").await;
+    let ecole = location_id(&mut tx, "École Jules-Ferry").await; // org = agglo-riviera
+    let err = sqlx::query(
+        "INSERT INTO alert_events (org_id, tracked_location_id, ref_location_id, openaq_location_id,
+                                   parameter_code, measured_value, unit, measured_at,
+                                   threshold_value, comparator, severity)
+         VALUES ($1, $2, 1, 1001, 'pm25', 30.0, 'µg/m³', now(), 20.0, '>', 'warning')",
+    )
+    .bind(cityair)
+    .bind(ecole)
+    .execute(&mut *tx)
+    .await
+    .expect_err("un alert_event dont l'org diffère de celle de son lieu suivi doit être refusé");
+    assert!(
+        err.to_string().contains("QRT_T7"),
+        "erreur T7 attendue : {err}"
+    );
+}
+
+#[tokio::test]
+async fn t7_alert_event_with_foreign_alert_rule_is_rejected() {
+    let pool = pool().await;
+    let mut tx = pool.begin().await.unwrap();
+    let cityair = org_id(&mut tx, "cityair").await;
+    // 'Seuil enfants PM2.5' appartient à agglo-riviera ; l'event prétend être cityair.
+    let err = sqlx::query(
+        "INSERT INTO alert_events (org_id, alert_rule_id, ref_location_id, openaq_location_id,
+                                   parameter_code, measured_value, unit, measured_at,
+                                   threshold_value, comparator, severity)
+         VALUES ($1, (SELECT id FROM alert_rules WHERE name = 'Seuil enfants PM2.5'),
+                 1, 1001, 'pm25', 30.0, 'µg/m³', now(), 20.0, '>', 'warning')",
+    )
+    .bind(cityair)
+    .execute(&mut *tx)
+    .await
+    .expect_err("un alert_event dont l'org diffère de celle de sa règle doit être refusé");
+    assert!(
+        err.to_string().contains("QRT_T7"),
+        "erreur T7 attendue : {err}"
+    );
+}
+
+#[tokio::test]
+async fn t7_coherent_alert_event_is_allowed() {
+    let pool = pool().await;
+    let mut tx = pool.begin().await.unwrap();
+    let agglo = org_id(&mut tx, "agglo-riviera").await;
+    let ecole = location_id(&mut tx, "École Jules-Ferry").await; // org = agglo-riviera
+    let res = sqlx::query(
+        "INSERT INTO alert_events (org_id, tracked_location_id, ref_location_id, openaq_location_id,
+                                   parameter_code, measured_value, unit, measured_at,
+                                   threshold_value, comparator, severity)
+         VALUES ($1, $2, 1, 1001, 'pm25', 30.0, 'µg/m³', now(), 20.0, '>', 'warning')",
+    )
+    .bind(agglo)
+    .bind(ecole)
+    .execute(&mut *tx)
+    .await
+    .expect("un event dont l'org concorde avec son lieu doit être accepté");
+    assert_eq!(res.rows_affected(), 1);
+}
+
+#[tokio::test]
+async fn t7_pure_snapshot_event_without_refs_is_allowed() {
+    let pool = pool().await;
+    let mut tx = pool.begin().await.unwrap();
+    let cityair = org_id(&mut tx, "cityair").await;
+    // Référents NULL (event survivant à un SET NULL en cascade) : seul org_id porte le
+    // tenant — T7 ne doit RIEN imposer (la FK org_id garantit l'existence de l'org).
+    let res = sqlx::query(
+        "INSERT INTO alert_events (org_id, alert_rule_id, tracked_location_id,
+                                   ref_location_id, openaq_location_id,
+                                   parameter_code, measured_value, unit, measured_at,
+                                   threshold_value, comparator, severity)
+         VALUES ($1, NULL, NULL, 1, 1001, 'pm25', 30.0, 'µg/m³', now(), 20.0, '>', 'warning')",
+    )
+    .bind(cityair)
+    .execute(&mut *tx)
+    .await
+    .expect("un event snapshot pur (référents NULL) doit être accepté");
+    assert_eq!(res.rows_affected(), 1);
+}
