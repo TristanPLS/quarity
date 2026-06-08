@@ -6,7 +6,8 @@
 >
 > ⚠️ **Ce n'est pas un avis juridique.** Chaque section propose une **décision par défaut** +
 > les points **« à confirmer »** avant tout encaissement réel (revue par un·e juriste).
-> Périmètre supposé : clients en **France / UE** (collectivités, établissements). Dernière mise à jour : 2026-06-05.
+> Périmètre supposé : clients en **France / UE** (collectivités, établissements).
+> Dernière mise à jour : 2026-06-08 (§1 et §4 resynchronisés : références fichiers post-migrations sqlx, statut D4.2/B5 figé).
 
 ---
 
@@ -30,7 +31,7 @@
   `commercialUseAllowed = false` ou `shareAlikeRequired = true` (le **share-alike** est **incompatible** avec un
   produit propriétaire payant — il forcerait à repartager les dérivés sous la même licence).
 - **Manque actuel** : l'ingestion (`back/src/bin/ingest.rs`) ne récupère **aucune** info de licence, et
-  `ref_locations` (`db/sql/01_schema.sql`) n'a **aucune** colonne de licence/attribution.
+  `ref_locations` (`back/migrations/0001_init.sql`) n'a **aucune** colonne de licence/attribution.
 
 ### Décisions proposées
 - **D1.1 — Capturer la licence à l'ingestion.** Interroger `/v3/licenses` + la licence de chaque station et
@@ -111,14 +112,17 @@ dispositif réglementaire certifié.
 
 ## 4. Qualité & hétérogénéité des données (pré-requis au calcul AQI)
 
-### Constat
-- **Unités hétérogènes** : OpenAQ mélange `µg/m³` et `ppb` selon polluant/source. L'ingestion
-  (`ingest.rs`) stocke l'unité **brute** avec un fallback `µg/m³` **arbitraire** si absente — aucune
-  normalisation ni validation.
-- **Incohérence déjà repérée** : le `COMMENT` sur `aqi_breakpoints.unit` (`db/sql/01_schema.sql`) affirme l'inverse
-  de ce que font le seed et `data-model.md §B` (paliers O₃/NO₂ en `ppb` vs unité OpenAQ en `µg/m³`).
-- Pour des **alertes sanitaires**, une **valeur fausse silencieuse** (mauvaise conversion d'unité) est le **pire**
-  mode de défaillance.
+### Constat *(statut au 2026-06-08 — D4.2 soldée par B5)*
+- **Unités hétérogènes** : OpenAQ mélange `µg/m³` et `ppb` selon polluant/source. **✅ Résolu (D4.2, PR #15,
+  2026-06-07)** : l'ingestion (`ingest.rs`) applique des **unités strictes** — toute mesure **sans unité** est
+  **ignorée et comptée** (plus **aucun** fallback `µg/m³` silencieux). L'unité brute est stockée telle quelle ;
+  la conversion `ppb ↔ µg/m³` est faite **au calcul AQI** (jamais à l'ingestion).
+- **✅ Incohérence corrigée (2026-06-07)** : le `COMMENT` sur `aqi_breakpoints.unit` — désormais dans
+  `back/migrations/0001_init.sql` (le schéma Postgres a migré vers sqlx ; `db/sql/01_schema.sql` n'est plus qu'un
+  **pointeur** sans DDL) — est en accord avec le seed et `data-model.md §B` : paliers O₃/NO₂ en `ppb`, distincts
+  de l'unité OpenAQ `µg/m³`, conversion explicite au calcul.
+- Pour des **alertes sanitaires**, une **valeur fausse silencieuse** (mauvaise conversion d'unité) reste le **pire**
+  mode de défaillance — d'où la stricte séparation unité source / unité de calcul ci-dessus.
 
 ### Décisions proposées
 - **D4.1 — Couche de validation/normalisation à l'ingestion** (avant le calcul AQI du Jalon 3) : allowlist
