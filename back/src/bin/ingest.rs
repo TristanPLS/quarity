@@ -3,7 +3,8 @@
 //! Usage : `quarity-ingest [location_id]`  (défaut 4085 = NICE PROMENADE)
 //! Env requis : OPENAQ_API_KEY, CLICKHOUSE_URL/USER/PASSWORD/DB, DATABASE_URL.
 //! Env optionnels : OPENAQ_LOCATION_ID, OPENAQ_DAYS (défaut 7), OPENAQ_ORG_SLUG (défaut agglo-riviera),
-//! OPENAQ_MAX_PAGES (défaut 50 — garde-fou de pagination par capteur).
+//! OPENAQ_MAX_PAGES (défaut 50 — garde-fou de pagination par capteur),
+//! INGEST_INTERVAL_SECS (absente/vide/0 = one-shot ; > 0 = scheduler, cf. « Modes d'exécution »).
 //!
 //! Récupère une station OpenAQ v3, ses mesures horaires des N derniers jours (pagination complète
 //! page par page, retry/backoff exponentiel sur les erreurs transitoires, pause de politesse entre
@@ -17,8 +18,16 @@
 //! Sémantique de reprise : l'INSERT ClickHouse est idempotent (`measurements` est une
 //! ReplacingMergeTree(ingested_at) et la lecture déduplique via argMax) et la liaison Postgres est
 //! en upsert (ON CONFLICT). Relancer le binaire après un échec partiel est donc SÛR : les lignes
-//! déjà insérées sont réécrites sans doublon visible — c'est le mode de reprise attendu pour un
-//! futur scheduler (A6/B7/B8).
+//! déjà insérées sont réécrites sans doublon visible — c'est le mode de reprise sur lequel
+//! s'appuie le scheduler ci-dessous (et le futur backfill A6b).
+//!
+//! Modes d'exécution (A6a) :
+//! - INGEST_INTERVAL_SECS absente, vide ou « 0 » : one-shot historique — un run unique puis
+//!   exit (0 si Ok, 1 si erreur) ;
+//! - INGEST_INTERVAL_SECS > 0 : scheduler long-running — premier run IMMÉDIAT au démarrage,
+//!   puis un run toutes les N secondes (`tokio::time::interval`). L'échec d'un run est loggué
+//!   et RETENTÉ au tick suivant (jamais de crash du conteneur) ; arrêt propre sur Ctrl-C et,
+//!   sous Unix, SIGTERM (`docker stop`).
 
 use std::collections::HashMap;
 use std::time::Duration;
@@ -212,6 +221,135 @@ async fn oaq_get_all_pages<T: for<'de> Deserialize<'de>>(
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // INGEST_INTERVAL_SECS pilote le mode d'exécution. Une valeur invalide est une erreur de
+    // CONFIGURATION : elle doit être bruyante (message explicite + exit 1, via anyhow), comme
+    // le parse de location_id — pas un défaut silencieux.
+    let interval_secs = parse_interval_secs(std::env::var("INGEST_INTERVAL_SECS").ok().as_deref())?;
+    if interval_secs == 0 {
+        // Mode one-shot historique : un run unique, exit 0 si Ok, 1 si erreur (via anyhow).
+        return run_ingest().await;
+    }
+    run_scheduler(interval_secs).await
+}
+
+/// Parse la valeur brute de `INGEST_INTERVAL_SECS` (cadence du scheduler, en secondes).
+///
+/// - `None` (variable absente) ou chaîne vide/blanche -> `Ok(0)` = mode one-shot. Le cas
+///   « vide » est volontairement assimilé à « absente » : docker compose passe `""` quand la
+///   variable hôte n'est pas posée (`OPENAQ_API_KEY: ${OPENAQ_API_KEY}` fait pareil).
+/// - Entier décimal >= 0 (espaces tolérés) -> `Ok(n)` ; 0 = one-shot, > 0 = scheduler.
+/// - Toute autre valeur -> `Err` explicite : une erreur de configuration doit être bruyante.
+///
+/// Fonction PURE (la valeur brute est un paramètre, pas un accès à l'env globale) : testable
+/// unitairement sans sérialisation ni réseau — cf. `mod tests` en fin de fichier.
+fn parse_interval_secs(raw: Option<&str>) -> Result<u64> {
+    match raw.map(str::trim) {
+        None | Some("") => Ok(0),
+        Some(s) => s.parse::<u64>().map_err(|e| {
+            anyhow!(
+                "INGEST_INTERVAL_SECS invalide : « {s} » n'est pas un nombre entier de secondes >= 0 ({e})"
+            )
+        }),
+    }
+}
+
+/// Mode scheduler (INGEST_INTERVAL_SECS > 0) : premier run IMMÉDIAT, puis un run toutes les
+/// `interval_secs` secondes, jusqu'à Ctrl-C ou (Unix) SIGTERM — ce que `docker stop` envoie.
+///
+/// - `MissedTickBehavior::Delay` : si un run dure plus longtemps que l'intervalle, le tick
+///   suivant est simplement décalé d'un intervalle complet — PAS de rattrapage en rafale qui
+///   martèlerait OpenAQ (rate-limit clé gratuite ~60 req/min) et les MV rollup ClickHouse.
+/// - L'échec d'un run (OPENAQ_API_KEY vide, org pas encore seedée, ClickHouse qui redémarre…)
+///   est loggué (`{e:#}` = chaîne de contextes anyhow) et la boucle CONTINUE : le tick suivant
+///   retente. Jamais de crash-loop du conteneur — l'idempotence du run (ReplacingMergeTree +
+///   upserts ON CONFLICT) rend la reprise sûre.
+/// - Signal reçu pendant l'ATTENTE (le `select!`) : sortie propre immédiate, exit 0. Signal
+///   reçu pendant un RUN : le canal `watch` le mémorise, le run SE TERMINE puis on sort (les
+///   runs durent quelques secondes ; si docker envoie SIGKILL après sa grâce de ~10 s, la même
+///   idempotence rend l'interruption récupérable au prochain démarrage).
+async fn run_scheduler(interval_secs: u64) -> Result<()> {
+    println!(
+        "Scheduler d'ingestion : 1 run toutes les {interval_secs} s (INGEST_INTERVAL_SECS) — premier run immédiat. Arrêt propre : Ctrl-C / SIGTERM."
+    );
+    let mut shutdown = spawn_shutdown_listener();
+    let mut ticker = tokio::time::interval(Duration::from_secs(interval_secs));
+    ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    let mut tick: u64 = 0;
+    loop {
+        tokio::select! {
+            _ = ticker.tick() => {} // le 1er tick d'un interval part immédiatement
+            _ = shutdown.changed() => {
+                println!("Signal d'arrêt reçu pendant l'attente — arrêt propre du scheduler.");
+                return Ok(());
+            }
+        }
+        tick += 1;
+        println!(
+            "⏰ tick #{tick} — {} UTC : démarrage du run d'ingestion",
+            Utc::now().format("%Y-%m-%d %H:%M:%S")
+        );
+        match run_ingest().await {
+            Ok(()) => println!("✓ tick #{tick} : run terminé."),
+            Err(e) => eprintln!(
+                "⚠ tick #{tick} : run en échec — nouvel essai au prochain tick. Cause : {e:#}"
+            ),
+        }
+        // Signal arrivé PENDANT le run (hors select!) : le watch l'a mémorisé.
+        if *shutdown.borrow() {
+            println!("Signal d'arrêt reçu pendant le run — arrêt propre du scheduler.");
+            return Ok(());
+        }
+        println!(
+            "Scheduler : prochain réveil dans ~{interval_secs} s (tick #{}).",
+            tick + 1
+        );
+    }
+}
+
+/// Écoute Ctrl-C et, sous Unix, SIGTERM dans une tâche dédiée. Le canal `watch` MÉMORISE le
+/// signal : même s'il arrive pendant un run (donc hors du `select!` d'attente), il est vu juste
+/// après via `borrow()`. Le `cfg(unix)` garde la compilation possible sous Windows (dev local),
+/// où seul Ctrl-C est écouté.
+fn spawn_shutdown_listener() -> tokio::sync::watch::Receiver<bool> {
+    let (tx, rx) = tokio::sync::watch::channel(false);
+    tokio::spawn(async move {
+        wait_for_shutdown_signal().await;
+        let _ = tx.send(true);
+    });
+    rx
+}
+
+async fn wait_for_shutdown_signal() {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{signal, SignalKind};
+        let mut sigterm = match signal(SignalKind::terminate()) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!(
+                    "⚠ impossible d'écouter SIGTERM ({e}) — seul Ctrl-C arrêtera proprement le scheduler"
+                );
+                let _ = tokio::signal::ctrl_c().await;
+                return;
+            }
+        };
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {}
+            _ = sigterm.recv() => {}
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = tokio::signal::ctrl_c().await;
+    }
+}
+
+/// Un run d'ingestion COMPLET — corps de l'ancien `main()`, comportement strictement identique :
+/// mêmes messages, mêmes étapes, sortie anticipée à 0 mesure, et pool Postgres créé À CHAQUE run
+/// (évite un pool stale entre deux ticks espacés d'une heure). `argv[1]` (prioritaire sur
+/// OPENAQ_LOCATION_ID) est relu à chaque run : constant sur la durée du process, il s'applique
+/// donc à tous les ticks du mode scheduler.
+async fn run_ingest() -> Result<()> {
     let key = env("OPENAQ_API_KEY")?;
     let ch_url = env("CLICKHOUSE_URL")?;
     let ch_user = env("CLICKHOUSE_USER")?;
@@ -478,4 +616,48 @@ async fn link_org(
 
     println!("✓ Station liée à l'org « {org_slug} » (lieu suivi « {tl_name} »)");
     Ok(())
+}
+
+// ---------- Tests unitaires (purs : aucun réseau, aucune env globale, aucun service) ----------
+#[cfg(test)]
+mod tests {
+    use super::parse_interval_secs;
+
+    #[test]
+    fn interval_absent_is_one_shot() {
+        assert_eq!(parse_interval_secs(None).unwrap(), 0);
+    }
+
+    #[test]
+    fn interval_empty_or_blank_is_one_shot() {
+        // docker compose passe "" quand la variable hôte n'est pas posée -> assimilé à absente.
+        assert_eq!(parse_interval_secs(Some("")).unwrap(), 0);
+        assert_eq!(parse_interval_secs(Some("   ")).unwrap(), 0);
+    }
+
+    #[test]
+    fn interval_zero_is_one_shot() {
+        assert_eq!(parse_interval_secs(Some("0")).unwrap(), 0);
+    }
+
+    #[test]
+    fn interval_positive_is_parsed() {
+        assert_eq!(parse_interval_secs(Some("3600")).unwrap(), 3600);
+        assert_eq!(parse_interval_secs(Some(" 20 ")).unwrap(), 20); // espaces tolérés
+    }
+
+    #[test]
+    fn interval_invalid_is_a_loud_error() {
+        for bad in ["abc", "-5", "1.5", "1h", "10 20"] {
+            let err = parse_interval_secs(Some(bad)).unwrap_err().to_string();
+            assert!(
+                err.contains("INGEST_INTERVAL_SECS"),
+                "le message doit nommer la variable fautive : {err}"
+            );
+            assert!(
+                err.contains(bad),
+                "le message doit citer la valeur reçue : {err}"
+            );
+        }
+    }
 }
