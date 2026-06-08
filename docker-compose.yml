@@ -132,6 +132,17 @@ services:
       postgres: { condition: service_healthy }
       clickhouse: { condition: service_healthy }
       redis: { condition: service_healthy }
+    healthcheck:
+      # /health ne répond qu'une fois le serveur en écoute — donc APRÈS l'application des
+      # migrations sqlx (main.rs migre AVANT axum::serve). Permet à ingest-scheduler d'attendre
+      # `service_healthy` au lieu de courir contre les migrations au 1er tick. curl est fourni
+      # par l'image runtime (back/Dockerfile). /health renvoie toujours 200 (le statut
+      # ok/degraded est dans le corps) → un 200 suffit à prouver « serveur prêt = migrations OK ».
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   # --- Ingestion OpenAQ (one-shot) — `docker compose --profile ingest run --rm ingest [location_id]` ---
   # Nécessite OPENAQ_API_KEY dans .env. Insère les mesures dans ClickHouse + lie la station à l'org.
@@ -162,10 +173,11 @@ services:
   # Fenêtre OPENAQ_DAYS=1 par défaut (INGEST_SCHEDULER_DAYS) : couvre le retard de publication
   # OpenAQ tout en divisant par 7 le bruit des MV rollup vs la fenêtre 7 j du one-shot (chaque
   # ré-insertion re-déclenche les MV AVANT dédup — cf. db/clickhouse/01_schema.sql §C.4).
-  # depends_on : back en service_started seulement (c'est LUI qui applique les migrations
-  # Postgres à son boot) ; sur une stack vierge l'org agglo-riviera n'existe qu'après le seed
-  # (profil seed) — un tick trop précoce ÉCHOUE proprement (erreur logguée) et est RETENTÉ au
-  # tick suivant : pas de crash du conteneur.
+  # depends_on : back en service_healthy (son healthcheck /health ne passe qu'une fois les
+  # migrations sqlx appliquées et le serveur en écoute) → le 1er tick ne court plus contre les
+  # migrations. NB : l'org agglo-riviera n'existe TOUJOURS qu'après le seed (profil seed) ; un
+  # tick antérieur au seed ÉCHOUE proprement (erreur logguée) et est RETENTÉ au tick suivant —
+  # pas de crash du conteneur.
   # ⚠ Ne PAS poser INGEST_INTERVAL_SECS=0 dans l'env hôte : sur CE service le binaire ferait un
   # one-shot puis exit 0, et `restart: unless-stopped` le relancerait en BOUCLE SERRÉE (spam
   # OpenAQ). Pour suspendre le scheduler : `docker compose stop ingest-scheduler` (cf. .env.example).
@@ -190,7 +202,7 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
       clickhouse: { condition: service_healthy }
-      back: { condition: service_started }
+      back: { condition: service_healthy }
 
   # --- Front React/Vite — login + série temporelle (nginx sert le statique + proxy /api -> back) ---
   front:
