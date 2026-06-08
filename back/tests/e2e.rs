@@ -869,3 +869,52 @@ async fn token_signed_with_wrong_secret_is_rejected() {
     let body = res.json::<Value>().await.expect("corps 401");
     assert_eq!(body["error"], "invalid_token");
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Durcissement mineurs back : offset de pagination borné + corps /auth borné
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// L'offset de pagination ne peut pas déborder : une `page` hors borne (1..=1_000_000)
+/// est rejetée en 400. Avant, `page` énorme × `page_size` wrappait l'offset u32 en build
+/// release (profil sans overflow-checks) → page de résultats fausse silencieusement.
+#[tokio::test]
+async fn measurements_out_of_range_page_is_bad_request() {
+    let base = spawn_app().await;
+    let token = access_token(&base, "sophie@agglo-riviera.fr").await;
+    let res = reqwest::Client::new()
+        .get(format!(
+            "{base}/api/measurements?location_id=1001&parameter=pm25&from=2026-04-01&to=2026-07-01&page=5000000"
+        ))
+        .bearer_auth(token)
+        .send()
+        .await
+        .expect("requête measurements");
+    assert_eq!(
+        res.status().as_u16(),
+        400,
+        "une page hors borne (1..=1_000_000) doit donner 400, pas un offset wrappé"
+    );
+    let body = res.json::<Value>().await.expect("corps 400");
+    assert_eq!(body["error"], "bad_request");
+}
+
+/// La borne de corps serrée sur `/auth` (8 Kio) rejette un payload démesuré AVANT
+/// désérialisation (413), rendant explicite la protection anti-DoS plutôt que de
+/// s'appuyer sur la limite axum implicite de 2 Mio.
+#[tokio::test]
+async fn oversized_auth_body_is_rejected() {
+    let base = spawn_app().await;
+    // Corps ~64 Kio (mot de passe gigantesque) — dépasse la borne 8 Kio de /auth.
+    let big = "x".repeat(64 * 1024);
+    let res = reqwest::Client::new()
+        .post(format!("{base}/api/auth/login"))
+        .json(&json!({ "email": "sophie@agglo-riviera.fr", "password": big }))
+        .send()
+        .await
+        .expect("requête login");
+    assert_eq!(
+        res.status().as_u16(),
+        413,
+        "un corps > 8 Kio sur /auth doit être rejeté en 413 (Payload Too Large)"
+    );
+}

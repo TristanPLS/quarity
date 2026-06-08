@@ -31,7 +31,8 @@ pub struct MeasurementsQuery {
     #[validate(custom(function = "validate_datetime_ish"))]
     #[param(example = "2026-07-01")]
     pub to: String,
-    /// Page 1-indexée (défaut : 1).
+    /// Page 1-indexée (défaut : 1 ; max 1 000 000 — borne anti-débordement de l'offset).
+    #[validate(range(min = 1, max = 1000000, message = "page attendue 1..=1000000"))]
     pub page: Option<u32>,
     /// Taille de page, clampée à 1..=1000 (défaut : 100).
     pub page_size: Option<u32>,
@@ -79,9 +80,13 @@ pub async fn list_measurements(
         return Err(AppError::Forbidden("location_not_in_org"));
     }
 
+    // `page` est borné par la validation (1..=1_000_000) ; le calcul en u64 évite le
+    // débordement SILENCIEUX d'un u32*u32 en build release (profil sans overflow-checks),
+    // qui renverrait une page de résultats fausse. L'offset reste < u32::MAX par
+    // construction ; `try_from` sature par sécurité plutôt que de wrapper.
     let page = q.page.unwrap_or(1).max(1);
     let page_size = q.page_size.unwrap_or(100).clamp(1, 1000);
-    let offset = (page - 1) * page_size;
+    let offset = u32::try_from((u64::from(page) - 1) * u64::from(page_size)).unwrap_or(u32::MAX);
 
     let rows = state
         .ch
