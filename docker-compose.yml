@@ -3,8 +3,9 @@ name: quarity
 # =============================================================================
 # Quarity — Walking skeleton, socle bases de données (Jalon 2)
 # =============================================================================
-# `docker compose up -d` lève Postgres + ClickHouse + Redis + back + front, avec
-# healthchecks et volumes nommés (persistance).
+# `docker compose up -d` lève Postgres + ClickHouse + Redis + back + front
+# + ingest-scheduler (ingestion OpenAQ périodique, A6a), avec healthchecks et
+# volumes nommés (persistance).
 #
 # Ordre de boot Postgres : le SCHÉMA est appliqué par le BACK au démarrage
 # (migrations sqlx — back/migrations/, cf. back/src/main.rs). Plus d'initdb.d
@@ -153,6 +154,43 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
       clickhouse: { condition: service_healthy }
+
+  # --- Scheduler d'ingestion OpenAQ (long-running) — démarre avec `docker compose up -d` ---
+  # Boucle tokio DANS le binaire (INGEST_INTERVAL_SECS > 0) : premier run immédiat, puis un run
+  # toutes les INGEST_INTERVAL_SECS secondes (défaut 3600 = 1 run/heure, très confortable face au
+  # rate-limit OpenAQ ~60 req/min : un run = ~4-7 requêtes).
+  # Fenêtre OPENAQ_DAYS=1 par défaut (INGEST_SCHEDULER_DAYS) : couvre le retard de publication
+  # OpenAQ tout en divisant par 7 le bruit des MV rollup vs la fenêtre 7 j du one-shot (chaque
+  # ré-insertion re-déclenche les MV AVANT dédup — cf. db/clickhouse/01_schema.sql §C.4).
+  # depends_on : back en service_started seulement (c'est LUI qui applique les migrations
+  # Postgres à son boot) ; sur une stack vierge l'org agglo-riviera n'existe qu'après le seed
+  # (profil seed) — un tick trop précoce ÉCHOUE proprement (erreur logguée) et est RETENTÉ au
+  # tick suivant : pas de crash du conteneur.
+  # ⚠ Ne PAS poser INGEST_INTERVAL_SECS=0 dans l'env hôte : sur CE service le binaire ferait un
+  # one-shot puis exit 0, et `restart: unless-stopped` le relancerait en BOUCLE SERRÉE (spam
+  # OpenAQ). Pour suspendre le scheduler : `docker compose stop ingest-scheduler` (cf. .env.example).
+  ingest-scheduler:
+    build: ./back
+    image: quarity-back:local
+    container_name: quarity_ingest_scheduler
+    restart: unless-stopped
+    entrypoint: ["quarity-ingest"]
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB}
+      OPENAQ_API_KEY: ${OPENAQ_API_KEY}
+      OPENAQ_LOCATION_ID: ${OPENAQ_LOCATION_ID:-4085}
+      OPENAQ_DAYS: ${INGEST_SCHEDULER_DAYS:-1}
+      OPENAQ_ORG_SLUG: ${OPENAQ_ORG_SLUG:-agglo-riviera}
+      OPENAQ_MAX_PAGES: ${OPENAQ_MAX_PAGES:-50}
+      INGEST_INTERVAL_SECS: ${INGEST_INTERVAL_SECS:-3600}
+    depends_on:
+      postgres: { condition: service_healthy }
+      clickhouse: { condition: service_healthy }
+      back: { condition: service_started }
 
   # --- Front React/Vite — login + série temporelle (nginx sert le statique + proxy /api -> back) ---
   front:
