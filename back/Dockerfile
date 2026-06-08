@@ -9,8 +9,10 @@ RUN cargo build --release
 
 # ---- runtime ----
 FROM debian:bookworm-slim AS runtime
+# ca-certificates : TLS sortant (OpenAQ, ClickHouse). curl : healthcheck Docker du service
+# back (GET /health) — voir docker-compose.yml.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates \
+ && apt-get install -y --no-install-recommends ca-certificates curl \
  && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=builder /app/target/release/quarity-back /usr/local/bin/quarity-back
