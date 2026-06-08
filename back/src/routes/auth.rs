@@ -193,23 +193,24 @@ pub async fn refresh(
         ));
     }
 
-    let (uid, oid) = crate::redis_store::read_refresh(&mut conn, &req.refresh_token)
+    // S4 + rotation ATOMIQUE : GETDEL consomme le refresh en UNE seule commande Redis.
+    // Sous deux requêtes concurrentes portant le même token (retry réseau, double-onglet,
+    // rejeu d'un token volé), Redis étant mono-thread, exactement UNE reçoit la valeur ;
+    // l'autre reçoit None → 401. Pas de duplication de session ni de rejeu silencieux.
+    // L'ancien refresh est déjà supprimé ici : aucune révocation séparée n'est nécessaire.
+    let (uid, oid) = crate::redis_store::take_refresh(&mut conn, &req.refresh_token)
         .await?
         .ok_or(AppError::Unauthorized("invalid_refresh"))?;
 
-    // Revalidation Postgres : membership existant ET compte actif. Un compte
-    // désactivé (ou sorti de l'org) perd sa session : refresh révoqué + 401.
+    // Revalidation Postgres : membership existant ET compte actif. Un compte désactivé
+    // (ou sorti de l'org) perd sa session — le refresh étant déjà consommé par le GETDEL
+    // ci-dessus, il suffit de refuser l'émission d'un nouveau couple.
     let ctx = crate::db::fetch_refresh_context(&state.pg, uid, oid).await?;
     let ctx = match ctx {
         Some(c) if c.is_active => c,
-        _ => {
-            crate::redis_store::delete_refresh(&mut conn, &req.refresh_token).await?;
-            return Err(AppError::Unauthorized("invalid_refresh"));
-        }
+        _ => return Err(AppError::Unauthorized("invalid_refresh")),
     };
 
-    // Rotation : on révoque l'ancien refresh et on en émet un nouveau.
-    crate::redis_store::delete_refresh(&mut conn, &req.refresh_token).await?;
     let new_jti = Uuid::new_v4().to_string();
     let ttl = state.cfg.access_ttl_secs;
     let access = security::issue_access_token(

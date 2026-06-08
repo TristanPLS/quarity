@@ -652,3 +652,220 @@ async fn cors_rejects_unknown_origin() {
     // Origine non autorisée → pas d'en-tête ACAO (le navigateur bloquerait la lecture).
     assert!(res.headers().get("access-control-allow-origin").is_none());
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Rotation atomique du refresh (P1) + logout anti-oracle (P3) + expiration (P4)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Login complet → (access_token, refresh_token).
+async fn login_tokens(base: &str, email: &str) -> (String, String) {
+    let (status, body) = login(base, email, DEMO_PASSWORD).await;
+    assert_eq!(status, 200, "login {email} doit réussir : {body:?}");
+    let body = body.expect("corps login");
+    (
+        body["access_token"]
+            .as_str()
+            .expect("access_token")
+            .to_string(),
+        body["refresh_token"]
+            .as_str()
+            .expect("refresh_token")
+            .to_string(),
+    )
+}
+
+/// POST /api/auth/logout (Bearer access + corps `refresh_token`) → (status, corps JSON).
+async fn logout(base: &str, access: &str, refresh_token: &str) -> (u16, Value) {
+    let res = reqwest::Client::new()
+        .post(format!("{base}/api/auth/logout"))
+        .bearer_auth(access)
+        .json(&json!({ "refresh_token": refresh_token }))
+        .send()
+        .await
+        .expect("requête logout");
+    let status = res.status().as_u16();
+    let body = res.json::<Value>().await.expect("corps logout");
+    (status, body)
+}
+
+/// POST /api/auth/refresh → status (sonde de validité d'un refresh token).
+async fn refresh_status(base: &str, refresh_token: &str) -> u16 {
+    reqwest::Client::new()
+        .post(format!("{base}/api/auth/refresh"))
+        .json(&json!({ "refresh_token": refresh_token }))
+        .send()
+        .await
+        .expect("requête refresh")
+        .status()
+        .as_u16()
+}
+
+/// P1 : la rotation du refresh est ATOMIQUE (GETDEL). Deux requêtes concurrentes portant le
+/// MÊME refresh token ne peuvent pas réussir toutes les deux : exactement une obtient un
+/// nouveau couple (200), l'autre est rejetée (401). Sans atomicité (read puis delete
+/// séparés), les deux pouvaient passer le read avant le delete et dupliquer la session.
+#[tokio::test]
+async fn concurrent_refresh_with_same_token_consumes_it_once() {
+    let base = spawn_app().await;
+    let (_, refresh) = login_tokens(&base, "sophie@agglo-riviera.fr").await;
+
+    let url = format!("{base}/api/auth/refresh");
+    let payload = json!({ "refresh_token": refresh });
+    let (r1, r2) = tokio::join!(
+        reqwest::Client::new().post(&url).json(&payload).send(),
+        reqwest::Client::new().post(&url).json(&payload).send(),
+    );
+    let mut got = [
+        r1.expect("refresh #1").status().as_u16(),
+        r2.expect("refresh #2").status().as_u16(),
+    ];
+    got.sort_unstable();
+    assert_eq!(
+        got,
+        [200, 401],
+        "un seul des deux refresh concurrents doit réussir, l'autre être rejeté : {got:?}"
+    );
+}
+
+/// P3 : le propriétaire qui se déconnecte révoque bien SON refresh token (il ne marche plus).
+#[tokio::test]
+async fn logout_revokes_own_refresh_token() {
+    let base = spawn_app().await;
+    let (access, refresh) = login_tokens(&base, "sophie@agglo-riviera.fr").await;
+
+    let (status, body) = logout(&base, &access, &refresh).await;
+    assert_eq!(status, 200, "le logout doit répondre 200");
+    assert_eq!(body["status"], "logged_out");
+
+    assert_eq!(
+        refresh_status(&base, &refresh).await,
+        401,
+        "après logout, l'ancien refresh token ne doit plus être valide"
+    );
+}
+
+/// P3 ANTI-ORACLE : déconnecter le refresh d'AUTRUI ne le révoque PAS (le token de la
+/// victime reste valide). Sinon le logout serait un oracle de révocation des tokens d'autrui.
+#[tokio::test]
+async fn logout_does_not_revoke_another_users_refresh_token() {
+    let base = spawn_app().await;
+    let (attacker_access, _) = login_tokens(&base, "sophie@agglo-riviera.fr").await;
+    let (_, victim_refresh) = login_tokens(&base, "audit@groupeindus.com").await;
+
+    // L'attaquant (sophie) tente de déconnecter le refresh de la victime (audit).
+    let (status, body) = logout(&base, &attacker_access, &victim_refresh).await;
+    assert_eq!(status, 200, "réponse identique (anti-oracle), jamais 403");
+    assert_eq!(body["status"], "logged_out");
+
+    assert_eq!(
+        refresh_status(&base, &victim_refresh).await,
+        200,
+        "le refresh d'un autre utilisateur ne doit JAMAIS être révoqué par le logout d'un tiers"
+    );
+}
+
+/// P3 ANTI-ORACLE : la réponse du logout est INDISTINGUABLE — statut + corps identiques —
+/// que le refresh soit le sien, inconnu, ou celui d'autrui. Un attaquant ne peut donc rien
+/// déduire sur la validité ni l'appartenance d'un refresh token.
+#[tokio::test]
+async fn logout_response_is_indistinguishable_across_cases() {
+    let base = spawn_app().await;
+    let (access, own_refresh) = login_tokens(&base, "sophie@agglo-riviera.fr").await;
+    let (_, foreign_refresh) = login_tokens(&base, "audit@groupeindus.com").await;
+    let unknown_refresh = Uuid::new_v4().to_string();
+
+    // Cas « autrui » et « inconnu » d'abord (ils ne consomment rien) ; le cas
+    // « propriétaire » en dernier car il révoque réellement son propre token.
+    let foreign = logout(&base, &access, &foreign_refresh).await;
+    let unknown = logout(&base, &access, &unknown_refresh).await;
+    let own = logout(&base, &access, &own_refresh).await;
+
+    assert_eq!(
+        foreign, unknown,
+        "autrui vs inconnu : réponses indistinguables"
+    );
+    assert_eq!(
+        unknown, own,
+        "inconnu vs propriétaire : réponses indistinguables"
+    );
+    assert_eq!(own.0, 200);
+    assert_eq!(own.1["status"], "logged_out");
+}
+
+/// P4 : un access token EXPIRÉ (au-delà de la leeway de 5 s) est rejeté en 401
+/// `token_expired` sur les routes protégées — chemin central de durée de vie de session.
+#[tokio::test]
+async fn expired_access_token_is_rejected() {
+    let base = spawn_app().await;
+    let secret = std::env::var("JWT_SECRET").expect("JWT_SECRET");
+
+    // Token forgé avec le BON secret mais déjà expiré (exp = now - 1 h, bien au-delà de la
+    // leeway de 5 s) : signature valide, expiration dépassée → rejet attendu.
+    let expired = quarity_back::security::issue_access_token(
+        secret.as_bytes(),
+        1, // user_id (sans importance : rejet à l'extraction, avant tout accès base)
+        1, // org_id
+        "admin",
+        true,
+        &Uuid::new_v4().to_string(),
+        -3600, // ttl négatif → exp dans le passé
+    )
+    .expect("forge d'un token expiré");
+
+    let res = reqwest::Client::new()
+        .get(format!("{base}/api/auth/me"))
+        .bearer_auth(&expired)
+        .send()
+        .await
+        .expect("requête me");
+    assert_eq!(
+        res.status().as_u16(),
+        401,
+        "un token expiré doit donner 401"
+    );
+    let body = res.json::<Value>().await.expect("corps 401");
+    assert_eq!(
+        body["error"], "token_expired",
+        "le code d'erreur doit distinguer l'expiration (`token_expired`)"
+    );
+
+    // Même rejet sur /measurements, AVANT toute requête base.
+    let status = measurements_status(&base, Some(&expired), 1001, "pm25").await;
+    assert_eq!(
+        status, 401,
+        "un token expiré doit aussi être refusé sur /measurements"
+    );
+}
+
+/// P4 (défense en profondeur) : un token signé avec un AUTRE secret (forgé) est rejeté en
+/// 401 `invalid_token` — la confiance repose sur la signature HS256, jamais sur le contenu.
+/// Verrouille la résistance à la falsification du jeton (et donc du claim `org_id`).
+#[tokio::test]
+async fn token_signed_with_wrong_secret_is_rejected() {
+    let base = spawn_app().await;
+    // Secret différent de celui du serveur (assez varié pour ne pas ressembler au vrai).
+    let forged = quarity_back::security::issue_access_token(
+        b"un-tout-autre-secret-de-test-0123456789",
+        1,
+        1,
+        "admin",
+        true,
+        &Uuid::new_v4().to_string(),
+        3600,
+    )
+    .expect("forge d'un token mal signé");
+
+    let res = reqwest::Client::new()
+        .get(format!("{base}/api/auth/me"))
+        .bearer_auth(&forged)
+        .send()
+        .await
+        .expect("requête me");
+    assert_eq!(
+        res.status().as_u16(),
+        401,
+        "un token signé avec un autre secret doit être refusé"
+    );
+    let body = res.json::<Value>().await.expect("corps 401");
+    assert_eq!(body["error"], "invalid_token");
+}
