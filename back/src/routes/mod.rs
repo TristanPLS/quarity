@@ -4,6 +4,7 @@ pub mod auth;
 pub mod health;
 pub mod measurements;
 
+use axum::extract::DefaultBodyLimit;
 use axum::http::{header, HeaderValue, Method};
 use axum::routing::{get, post};
 use axum::Router;
@@ -29,12 +30,21 @@ fn cors_layer(allowed_origins: &[String]) -> CorsLayer {
 pub fn build_router(state: AppState) -> Router {
     let cors = cors_layer(&state.cfg.cors_allowed_origins);
 
-    Router::new()
-        .route("/health", get(health::health))
+    // Routes d'authentification : corps minuscules (identifiants, ou un refresh token).
+    // Borne de corps SERRÉE et explicite (8 Kio) — sans elle, la seule protection serait
+    // la limite axum par défaut (2 Mio) : la validation `max=512` du mot de passe ne
+    // s'applique qu'APRÈS désérialisation complète du JSON. Rend la borne anti-DoS visible
+    // et auditable (un corps démesuré est rejeté en 413 AVANT tout travail).
+    let auth_routes = Router::new()
         .route("/api/auth/login", post(auth::login))
         .route("/api/auth/refresh", post(auth::refresh))
         .route("/api/auth/logout", post(auth::logout))
         .route("/api/auth/me", get(auth::me))
+        .layer(DefaultBodyLimit::max(8 * 1024));
+
+    Router::new()
+        .route("/health", get(health::health))
+        .merge(auth_routes)
         .route("/api/measurements", get(measurements::list_measurements))
         // En-têtes de sécurité — API JSON only ⇒ CSP « default-src 'none' ».
         .layer(SetResponseHeaderLayer::overriding(
