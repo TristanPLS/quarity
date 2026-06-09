@@ -2,7 +2,7 @@
 
 > Vue d'ensemble vivante : ce qui est **fait/validé**, la **dette connue**, et les **missions à venir** par priorité.
 > Complète [`roadmap.md`](../roadmap.md) (le plan) avec l'avancement réel. Trace d'audit détaillée : [`logs/`](../logs/).
-> Dernière mise à jour : 2026-06-07 (**Jalon 3 — axe BDD clos : B1–B5 livrés**. B5 ClickHouse : moyennes glissantes réglementaires + AQI US EPA — `db/clickhouse/queries/rolling_regulatory.sql`, 13 tests d'intégration ClickHouse. A2/A5 mergées plus tôt le même jour).
+> Dernière mise à jour : 2026-06-10 (**B6 livré : CRUD complet, 20 endpoints** — voir l'entrée B6. Pour mémoire : durcissement post-analyse #28–#33 mergé les 2026-06-08→09 ; 2026-06-07 = Jalon 3 axe BDD clos B1–B5, B5 ClickHouse — `db/clickhouse/queries/rolling_regulatory.sql`).
 
 ---
 
@@ -65,7 +65,7 @@ README, AGENTS.md, CONTRIBUTING.md, roadmap, pitch, identité, logs. *(Repo Git 
 - [x] **B5** ClickHouse : MV rollup maintenue, **moyennes glissantes réglementaires** (`db/clickhouse/queries/rolling_regulatory.sql`), calcul **AQI** via breakpoints. — ✅ livré 2026-06-07 (logs/2026-06-07__agent-bdd__jalon3-b5-clickhouse.md) : 4 requêtes paramétrées — Q1 fenêtres 24 h (pm25/pm10) / 8 h (o3) / 1 h (no2) + couverture EPA 75 %, Q2 AQI US EPA instantané + polluant dominant (conversion ppb figée, D4.2), Q3 O₃ max journalier de la moyenne 8 h, Q4 NO₂ moyenne annuelle (exception documentée : rollup `measurements_daily`, TTL 90 j des bruts) — + **13 tests** d'intégration ClickHouse (`back/tests/ch.rs`, autonomes, 2 revues adversariales passées). MVs rollup : en place depuis le Jalon 1, validées. *so2/co exclus de l'AQI (pas de breakpoints seedés) — à seeder au besoin avec B9/B10.*
 
 **Back** :
-- [ ] **B6** CRUD complet (16+ endpoints) users/orgs/tracked_locations/alert_rules + codes HTTP + pagination/tri/filtre.
+- [x] **B6** CRUD complet (16+ endpoints) users/orgs/tracked_locations/alert_rules + codes HTTP + pagination/tri/filtre. — ✅ livré 2026-06-10 (logs/2026-06-10__agent-back__b6-crud-endpoints.md) : **20 endpoints** (5 × 4 ressources). Isolation multi-tenant **par construction** (toute requête SQL scopée org du JWT ou membership ; ressource étrangère ⇒ **404 anti-énumération**, le 403 est réservé aux rôles) ; gardes RBAC dans les **signatures** des handlers (`CanWrite` ⇒ 403 `read_only_role`, `RequireAdmin` ⇒ 403 `admin_required`) ; pagination/tri (allowlist stricte)/recherche `q`/filtres uniformes (`back/src/listing.rs`) ; **409/422 mappés** depuis Postgres (23505 unique → 409 `conflict`, triggers `QRT_*`/23514/23503 → 422 `unprocessable_entity`) ; POST lieux via **P1** (stations + règles atomiques) ; mutations `alert_rules` **auditées T5** (GUC `quarity.actor_user_id` posé en transaction — vérifié e2e de bout en bout) ; orgs en **soft-delete** (`deleted_at` filtré jusque dans login/refresh) ; OpenAPI complet (4 nouveaux tags, 413 documenté). **+55 tests e2e** (orgs jetables par test, seed jamais mutée — total back : 85 e2e + 24 db + 13 ch + 27 unitaires = 149). *Reliquats hors B6 : sélecteur multi-org au login, sous-ressource stations d'un lieu (T1), invitation d'un compte existant, rate-limit des endpoints CRUD (A4/B9).*
 - [ ] **B7** **Boucle de matching de seuils** (cache Moka L1) → `alert_events`.
 - [ ] **B8** Redis **pub/sub + WebSocket** alertes temps réel.
 - [ ] **B9** Profils d'exposition + calcul de dose ; API publique + clés API + quotas.

@@ -40,6 +40,9 @@ pub async fn fetch_auth_context_by_email(
         FROM users u
         JOIN memberships m ON m.user_id = u.id
         JOIN roles       r ON r.id      = m.role_id
+        -- B6 : une org soft-supprimée (DELETE /api/organizations) ne doit plus
+        -- accepter de login — sans ce filtre, la membership suffirait.
+        JOIN organizations o ON o.id = m.org_id AND o.deleted_at IS NULL
         WHERE lower(u.email::text) = lower($1)
           AND u.is_active = TRUE
         ORDER BY m.org_id
@@ -88,6 +91,39 @@ pub async fn fetch_refresh_context(
         FROM memberships m
         JOIN roles r ON r.id = m.role_id
         JOIN users u ON u.id = m.user_id
+        -- B6 : même règle qu'au login — une org soft-supprimée tue la session au refresh.
+        JOIN organizations o ON o.id = m.org_id AND o.deleted_at IS NULL
+        WHERE m.user_id = $1 AND m.org_id = $2
+        LIMIT 1
+        "#,
+    )
+    .bind(user_id)
+    .bind(org_id)
+    .fetch_optional(pool)
+    .await
+}
+
+#[derive(Debug, sqlx::FromRow)]
+pub struct RoleInOrgRow {
+    pub role_code: String,
+    pub can_write: bool,
+    pub can_manage_org: bool,
+}
+
+/// Rôle effectif d'un user dans UNE org donnée (B6) — le rôle des claims JWT ne vaut
+/// que pour `claims.org_id` : toute opération visant une AUTRE org (multi-org via
+/// memberships) doit re-résoudre le rôle ici. Orgs soft-supprimées exclues.
+pub async fn fetch_role_in_org(
+    pool: &PgPool,
+    user_id: i64,
+    org_id: i64,
+) -> Result<Option<RoleInOrgRow>, sqlx::Error> {
+    sqlx::query_as::<_, RoleInOrgRow>(
+        r#"
+        SELECT r.code AS role_code, r.can_write AS can_write, r.can_manage_org AS can_manage_org
+        FROM memberships m
+        JOIN roles r         ON r.id = m.role_id
+        JOIN organizations o ON o.id = m.org_id AND o.deleted_at IS NULL
         WHERE m.user_id = $1 AND m.org_id = $2
         LIMIT 1
         "#,
@@ -120,6 +156,21 @@ pub async fn org_owns_location(
     .fetch_one(pool)
     .await?;
     Ok(owns)
+}
+
+/// Attribue l'acteur des triggers d'audit (T5 lit le GUC `quarity.actor_user_id`)
+/// à la TRANSACTION courante (`set_config(..., is_local = true)` ⇒ retombe à vide au
+/// COMMIT/ROLLBACK — aucune fuite d'acteur entre requêtes d'un même pool).
+/// À appeler en tête de toute transaction qui mute `alert_rules` (B6).
+pub async fn set_audit_actor(
+    conn: &mut sqlx::PgConnection,
+    user_id: i64,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("SELECT set_config('quarity.actor_user_id', $1, true)")
+        .bind(user_id.to_string())
+        .execute(conn)
+        .await?;
+    Ok(())
 }
 
 pub async fn ping(pool: &PgPool) -> Result<(), sqlx::Error> {

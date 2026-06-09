@@ -17,7 +17,9 @@ use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 use utoipa::{Modify, OpenApi, ToSchema};
 use utoipa_swagger_ui::SwaggerUi;
 
-use crate::routes::{auth, health, measurements};
+use crate::routes::{
+    alert_rules, auth, health, measurements, organizations, tracked_locations, users,
+};
 
 /// Nom du schéma de sécurité référencé par les annotations `security(("bearer_jwt" = []))`.
 const BEARER_JWT: &str = "bearer_jwt";
@@ -38,12 +40,36 @@ const BEARER_JWT: &str = "bearer_jwt";
         auth::logout,
         auth::me,
         measurements::list_measurements,
+        tracked_locations::list,
+        tracked_locations::create,
+        tracked_locations::get_one,
+        tracked_locations::update,
+        tracked_locations::delete,
+        alert_rules::list,
+        alert_rules::create,
+        alert_rules::get_one,
+        alert_rules::update,
+        alert_rules::delete,
+        users::list,
+        users::create,
+        users::get_one,
+        users::update,
+        users::delete,
+        organizations::list,
+        organizations::create,
+        organizations::get_one,
+        organizations::update,
+        organizations::delete,
     ),
     modifiers(&SecurityAddon),
     tags(
         (name = "health", description = "Liveness / readiness du service et de ses dépendances"),
         (name = "auth", description = "Authentification JWT : login, refresh (rotation), logout, identité"),
         (name = "measurements", description = "Mesures de qualité de l'air (ClickHouse, isolation multi-tenant)"),
+        (name = "tracked-locations", description = "CRUD des lieux suivis (B6) — isolation multi-tenant, 404 anti-énumération"),
+        (name = "alert-rules", description = "CRUD des règles de seuil (B6) — mutations auditées (T5), isolation multi-tenant"),
+        (name = "users", description = "CRUD des membres de l'organisation (B6) — gestion réservée au rôle admin"),
+        (name = "organizations", description = "CRUD des organisations de l'appelant (B6) — rôle re-résolu par org, soft-delete"),
     )
 )]
 pub struct ApiDoc;

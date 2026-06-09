@@ -18,6 +18,7 @@ sqlx = { version = "0.8", default-features = false, features = [
     "postgres",
     "macros",            # uniquement pour #[derive(FromRow)]
     "migrate",           # migrations embarquées (sqlx::migrate! sur back/migrations/, appliquées au boot)
+    "chrono",            # TIMESTAMPTZ <-> chrono::DateTime<Utc> (DTOs CRUD B6)
 ] }
 
 # --- Redis (refresh tokens) ---
@@ -26,8 +27,8 @@ redis = { version = "0.27", features = ["tokio-comp", "connection-manager"] }
 # --- ClickHouse via HTTP ---
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
-# --- Ingestion OpenAQ (binaire ingest) ---
-chrono = { version = "0.4", features = ["clock"] }
+# --- Ingestion OpenAQ (binaire ingest) + timestamps des DTOs CRUD (B6) ---
+chrono = { version = "0.4", features = ["clock", "serde"] }
 
 # --- Auth / crypto ---
 argon2       = "0.5"
@@ -39,7 +40,7 @@ serde      = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 # --- Doc OpenAPI /api/docs (A2) — `vendored` : Swagger UI embarqué, zéro réseau au build (Docker/CI) ---
-utoipa            = { version = "5", features = ["axum_extras"] }
+utoipa            = { version = "5", features = ["axum_extras", "chrono"] }
 utoipa-swagger-ui = { version = "9", features = ["axum", "vendored"] }
 
 # --- Validation des inputs au boundary (A5) ---

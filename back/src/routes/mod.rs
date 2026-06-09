@@ -1,8 +1,12 @@
 //! Assemblage du routeur + couches transverses.
 
+pub mod alert_rules;
 pub mod auth;
 pub mod health;
 pub mod measurements;
+pub mod organizations;
+pub mod tracked_locations;
+pub mod users;
 
 use axum::extract::DefaultBodyLimit;
 use axum::http::{header, HeaderValue, Method};
@@ -23,7 +27,8 @@ fn cors_layer(allowed_origins: &[String]) -> CorsLayer {
         .collect();
     CorsLayer::new()
         .allow_origin(origins)
-        .allow_methods([Method::GET, Method::POST])
+        // PATCH/DELETE : requis par le CRUD B6 (mutations partielles + suppressions).
+        .allow_methods([Method::GET, Method::POST, Method::PATCH, Method::DELETE])
         .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE])
 }
 
@@ -42,9 +47,52 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/auth/me", get(auth::me))
         .layer(DefaultBodyLimit::max(8 * 1024));
 
+    // Routes CRUD (B6) : corps JSON bornés à 64 Kio — le plus gros corps légitime
+    // (POST lieu : 50 stations + 50 règles) reste sous 16 Kio, marge ×4.
+    let crud_routes = Router::new()
+        .route(
+            "/api/tracked-locations",
+            get(tracked_locations::list).post(tracked_locations::create),
+        )
+        .route(
+            "/api/tracked-locations/{id}",
+            get(tracked_locations::get_one)
+                .patch(tracked_locations::update)
+                .delete(tracked_locations::delete),
+        )
+        .route(
+            "/api/alert-rules",
+            get(alert_rules::list).post(alert_rules::create),
+        )
+        .route(
+            "/api/alert-rules/{id}",
+            get(alert_rules::get_one)
+                .patch(alert_rules::update)
+                .delete(alert_rules::delete),
+        )
+        .route("/api/users", get(users::list).post(users::create))
+        .route(
+            "/api/users/{id}",
+            get(users::get_one)
+                .patch(users::update)
+                .delete(users::delete),
+        )
+        .route(
+            "/api/organizations",
+            get(organizations::list).post(organizations::create),
+        )
+        .route(
+            "/api/organizations/{id}",
+            get(organizations::get_one)
+                .patch(organizations::update)
+                .delete(organizations::delete),
+        )
+        .layer(DefaultBodyLimit::max(64 * 1024));
+
     Router::new()
         .route("/health", get(health::health))
         .merge(auth_routes)
+        .merge(crud_routes)
         .route("/api/measurements", get(measurements::list_measurements))
         // En-têtes de sécurité — API JSON only ⇒ CSP « default-src 'none' ».
         .layer(SetResponseHeaderLayer::overriding(
