@@ -176,6 +176,53 @@ impl FromRequestParts<AppState> for AuthUser {
     }
 }
 
+/// Garde d'écriture (B6) : `AuthUser` + refus 403 si `can_write = false` (rôle `lecteur`).
+///
+/// À utiliser comme TYPE D'ARGUMENT de tout handler de mutation (POST/PATCH/DELETE) :
+/// l'isolation ne dépend plus d'un `if` que chaque handler pourrait oublier — un
+/// handler de mutation qui prend `CanWrite` ne compile pas sans la vérification.
+/// Code d'erreur stable : `read_only_role`.
+#[derive(Debug, Clone)]
+pub struct CanWrite(pub AuthUser);
+
+impl FromRequestParts<AppState> for CanWrite {
+    type Rejection = AppError;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &AppState,
+    ) -> Result<Self, Self::Rejection> {
+        let user = AuthUser::from_request_parts(parts, state).await?;
+        if !user.can_write {
+            return Err(AppError::Forbidden("read_only_role"));
+        }
+        Ok(CanWrite(user))
+    }
+}
+
+/// Garde d'administration (B6) : réservé au rôle `admin` de l'org du JWT
+/// (gestion des membres, de l'organisation). Code d'erreur stable : `admin_required`.
+///
+/// Le rôle provient des claims (signés) — pour une opération sur une AUTRE org que
+/// celle du JWT, le rôle doit être re-résolu en base via `db::fetch_role_in_org`.
+#[derive(Debug, Clone)]
+pub struct RequireAdmin(pub AuthUser);
+
+impl FromRequestParts<AppState> for RequireAdmin {
+    type Rejection = AppError;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &AppState,
+    ) -> Result<Self, Self::Rejection> {
+        let user = AuthUser::from_request_parts(parts, state).await?;
+        if user.role != "admin" {
+            return Err(AppError::Forbidden("admin_required"));
+        }
+        Ok(RequireAdmin(user))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{client_ip, dummy_verify_password};

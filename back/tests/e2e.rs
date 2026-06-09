@@ -21,75 +21,13 @@
 //!
 //! Donc `audit@groupeindus` interrogeant 1001 doit recevoir 403 (isolation multi-tenant).
 
-use quarity_back::{config::Config, routes::build_router, state::AppState};
 use serde_json::{json, Value};
-use std::sync::Arc;
 use uuid::Uuid;
 
-/// Mot de passe partagé de tous les comptes de démo (cf. seed).
-const DEMO_PASSWORD: &str = "Quarity2026!";
-
-/// Démarre le back sur un port éphémère et renvoie l'URL de base (`http://127.0.0.1:PORT`).
-///
-/// Limites de rate-limit relevées très haut : Redis est PARTAGÉ entre les tests (qui
-/// tournent en parallèle), les compteurs par email/IP s'accumuleraient sinon d'un test
-/// à l'autre et déclencheraient des 429 parasites. Le comportement du rate-limit est
-/// testé explicitement (avec sa limite réelle) dans
-/// `sixth_failed_login_on_same_email_is_rate_limited`.
-async fn spawn_app() -> String {
-    spawn_app_with(|c| {
-        c.rate_limit_login_email_per_min = 10_000;
-        c.rate_limit_login_ip_per_min = 10_000;
-        c.rate_limit_refresh_ip_per_min = 10_000;
-    })
-    .await
-}
-
-/// Variante de `spawn_app` permettant d'ajuster la config pour UN test (chaque test
-/// lance sa propre instance du back, seules les bases sont partagées).
-async fn spawn_app_with(tweak: impl FnOnce(&mut Config)) -> String {
-    let cfg = Config::from_env().expect(
-        "config depuis l'env (DATABASE_URL, REDIS_URL, CLICKHOUSE_URL/USER/PASSWORD, JWT_SECRET>=32)",
-    );
-    let mut cfg = (*cfg).clone();
-    tweak(&mut cfg);
-    let state = AppState::connect(Arc::new(cfg))
-        .await
-        .expect("connexion Postgres/Redis/ClickHouse (les 3 bases doivent tourner + être seedées)");
-    let app = build_router(state);
-
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-        .await
-        .expect("bind port éphémère");
-    let addr = listener.local_addr().expect("local_addr");
-    tokio::spawn(async move {
-        axum::serve(listener, app).await.expect("serveur de test");
-    });
-    format!("http://{addr}")
-}
-
-/// POST /api/auth/login → (status, corps JSON éventuel).
-async fn login(base: &str, email: &str, password: &str) -> (u16, Option<Value>) {
-    let res = reqwest::Client::new()
-        .post(format!("{base}/api/auth/login"))
-        .json(&json!({ "email": email, "password": password }))
-        .send()
-        .await
-        .expect("requête login");
-    let status = res.status().as_u16();
-    let body = res.json::<Value>().await.ok();
-    (status, body)
-}
-
-/// Login d'un compte de démo et renvoie son access token (échoue si le login échoue).
-async fn access_token(base: &str, email: &str) -> String {
-    let (status, body) = login(base, email, DEMO_PASSWORD).await;
-    assert_eq!(status, 200, "login {email} doit réussir : {body:?}");
-    body.expect("corps login")["access_token"]
-        .as_str()
-        .expect("access_token présent")
-        .to_string()
-}
+// Harnais partagé (B6) : spawn_app/login/access_token vivent dans `tests/common/`
+// — mêmes helpers pour ce fichier et les suites CRUD `b6_*.rs`.
+mod common;
+use common::{access_token, login, spawn_app, spawn_app_with, DEMO_PASSWORD};
 
 /// GET /api/measurements (token optionnel) → status code.
 async fn measurements_status(

@@ -107,6 +107,63 @@ pub fn validate_not_blank(s: &str) -> Result<(), validator::ValidationError> {
     Ok(())
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Allowlists déclaratives des DTOs CRUD (B6). Chacune est le MIROIR d'un CHECK
+// du schéma (0001_init.sql) : la base reste l'autorité, le boundary évite juste
+// qu'une valeur invalide parte en transaction pour revenir en erreur SQL.
+// ─────────────────────────────────────────────────────────────────────────────
+
+fn validate_in(
+    value: &str,
+    allowed: &'static [&'static str],
+    code: &'static str,
+) -> Result<(), validator::ValidationError> {
+    if allowed.contains(&value) {
+        return Ok(());
+    }
+    Err(validator::ValidationError::new(code)
+        .with_message(format!("valeurs acceptées : {}", allowed.join(", ")).into()))
+}
+
+/// Codes polluants (miroir du CHECK `parameters.code`).
+pub fn validate_parameter_code(s: &str) -> Result<(), validator::ValidationError> {
+    validate_in(s, &["pm25", "pm10", "no2", "o3", "so2", "co"], "parameter")
+}
+
+/// Comparateurs de règle d'alerte (miroir du CHECK `alert_rules.comparator`).
+pub fn validate_comparator(s: &str) -> Result<(), validator::ValidationError> {
+    validate_in(s, &[">", ">="], "comparator")
+}
+
+/// Sévérités de règle d'alerte (miroir du CHECK `alert_rules.severity`).
+pub fn validate_severity(s: &str) -> Result<(), validator::ValidationError> {
+    validate_in(s, &["info", "warning", "critical"], "severity")
+}
+
+/// Codes de rôle RBAC (miroir du CHECK `roles.code`).
+pub fn validate_role_code(s: &str) -> Result<(), validator::ValidationError> {
+    validate_in(s, &["admin", "gestionnaire", "lecteur"], "role")
+}
+
+/// Segments d'organisation (miroir du CHECK `organizations.segment`).
+pub fn validate_segment(s: &str) -> Result<(), validator::ValidationError> {
+    validate_in(s, &["B2G", "B2B", "B2B2C"], "segment")
+}
+
+/// Slug d'organisation (miroir du CHECK `organizations.slug` : `^[a-z0-9-]{2,64}$`),
+/// vérifié sans crate regex.
+pub fn validate_org_slug(s: &str) -> Result<(), validator::ValidationError> {
+    let len_ok = (2..=64).contains(&s.len());
+    let chars_ok = s
+        .chars()
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
+    if len_ok && chars_ok {
+        return Ok(());
+    }
+    Err(validator::ValidationError::new("slug")
+        .with_message("2 à 64 caractères parmi [a-z0-9-]".into()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::parse_datetime_ish;
@@ -157,5 +214,31 @@ mod tests {
     fn date_only_is_midnight() {
         let dt = parse_datetime_ish("2026-04-01").expect("date simple");
         assert_eq!(dt.format("%H:%M:%S").to_string(), "00:00:00");
+    }
+
+    #[test]
+    fn allowlists_mirror_schema_checks() {
+        use super::*;
+        assert!(validate_parameter_code("pm25").is_ok());
+        assert!(validate_parameter_code("PM25").is_err()); // sensible à la casse, comme le CHECK
+        assert!(validate_comparator(">=").is_ok());
+        assert!(validate_comparator("<").is_err()); // seuls les dépassements existent (US-02)
+        assert!(validate_severity("critical").is_ok());
+        assert!(validate_severity("fatal").is_err());
+        assert!(validate_role_code("lecteur").is_ok());
+        assert!(validate_role_code("root").is_err());
+        assert!(validate_segment("B2G").is_ok());
+        assert!(validate_segment("b2g").is_err());
+    }
+
+    #[test]
+    fn org_slug_rules() {
+        use super::validate_org_slug;
+        assert!(validate_org_slug("agglo-riviera").is_ok());
+        assert!(validate_org_slug("e2").is_ok()); // borne basse : 2 caractères
+        assert!(validate_org_slug("a").is_err()); // trop court
+        assert!(validate_org_slug("Agglo").is_err()); // majuscule
+        assert!(validate_org_slug("a_b").is_err()); // underscore hors charte
+        assert!(validate_org_slug(&"x".repeat(65)).is_err()); // trop long
     }
 }
