@@ -50,6 +50,7 @@ const BEARER_JWT: &str = "bearer_jwt";
         alert_rules::get_one,
         alert_rules::update,
         alert_rules::delete,
+        alert_rules::run,
         users::list,
         users::create,
         users::get_one,

@@ -34,7 +34,7 @@
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::Json;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 use validator::Validate;
@@ -485,6 +485,95 @@ pub async fn update(
         .ok_or(AppError::NotFound("alert_rule_not_found"))?;
     tx.commit().await?;
     Ok(Json(dto))
+}
+
+/// Paramètres du force-check (`POST /api/alert-rules/{id}/run`).
+#[derive(Debug, Deserialize, IntoParams, Validate)]
+#[into_params(parameter_in = Query)]
+pub struct RunQuery {
+    /// Fenêtre réévaluée, en heures d'ARRIVÉE des mesures (`ingested_at`) —
+    /// défaut 24, bornée 1..=168 (la dédup 0006 rend le rejouage sans risque).
+    #[validate(range(min = 1, max = 168, message = "lookback_hours attendu 1..=168"))]
+    pub lookback_hours: Option<u32>,
+}
+
+/// Bilan d'un force-check.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct RunOutcome {
+    pub rule_id: i64,
+    /// Mesures (dédupliquées) relues sur la fenêtre.
+    pub evaluated: usize,
+    /// Dépassements constatés (avant déduplication en base).
+    pub breaches: usize,
+    /// Événements RÉELLEMENT créés (un re-run renvoie 0 : idempotence 0006).
+    pub events_created: u64,
+}
+
+/// Force-check (B7) : réévalue UNE règle immédiatement sur les mesures
+/// récemment ingérées — même moteur que la boucle périodique (hot path Moka),
+/// même idempotence (un dépassement déjà alerté ne re-crée rien).
+#[utoipa::path(
+    post,
+    path = "/api/alert-rules/{id}/run",
+    tag = "alert-rules",
+    params(
+        ("id" = i64, Path, description = "Identifiant de la règle de seuil"),
+        RunQuery
+    ),
+    security(("bearer_jwt" = [])),
+    responses(
+        (status = 200, description = "Bilan d'évaluation (les événements créés apparaissent dans alert_events / le compteur non-lus)", body = RunOutcome),
+        (status = 400, description = "`lookback_hours` hors borne 1..=168 (corps `ErrorBody`, ou rejet `Query` en corps texte)", body = crate::openapi::ErrorBody),
+        (status = 401, description = "Bearer manquant, invalide ou expiré", body = crate::openapi::ErrorBody),
+        (status = 403, description = "Rôle sans droit d'écriture (`read_only_role`)", body = crate::openapi::ErrorBody),
+        (status = 404, description = "Id inconnu ou règle d'une autre org (`alert_rule_not_found`)", body = crate::openapi::ErrorBody),
+        (status = 422, description = "Règle inactive, lieu en pause ou org supprimée — rien à évaluer (`unprocessable_entity`)", body = crate::openapi::ErrorBody),
+    )
+)]
+pub async fn run(
+    State(state): State<AppState>,
+    CanWrite(user): CanWrite,
+    Path(id): Path<i64>,
+    ValidatedQuery(q): ValidatedQuery<RunQuery>,
+) -> Result<Json<RunOutcome>, AppError> {
+    // 404 d'abord (existence scopée org — anti-énumération), 422 ensuite
+    // (la règle existe mais n'est pas évaluable : statut/lieu/org).
+    let exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM alert_rules WHERE id = $1 AND org_id = $2)",
+    )
+    .bind(id)
+    .bind(user.org_id)
+    .fetch_one(&state.pg)
+    .await?;
+    if !exists {
+        return Err(AppError::NotFound("alert_rule_not_found"));
+    }
+
+    let index = crate::matching::load_rule_index_for_rule(&state.pg, user.org_id, id).await?;
+    if index.is_empty() {
+        return Err(AppError::Unprocessable(
+            "règle inactive, lieu suivi en pause ou organisation supprimée — rien à évaluer".into(),
+        ));
+    }
+
+    let lookback = i64::from(q.lookback_hours.unwrap_or(24));
+    let since = Utc::now() - Duration::hours(lookback);
+    let outcome = crate::matching::run_once(
+        &state.pg,
+        &state.ch,
+        &index,
+        since,
+        state.cfg.matching_batch_limit,
+    )
+    .await
+    .map_err(AppError::Internal)?;
+
+    Ok(Json(RunOutcome {
+        rule_id: id,
+        evaluated: outcome.evaluated,
+        breaches: outcome.breaches,
+        events_created: outcome.inserted,
+    }))
 }
 
 /// Supprime une règle de seuil (les `alert_events` adossés survivent — FK

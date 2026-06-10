@@ -9,6 +9,7 @@ pub mod config;
 pub mod db;
 pub mod error;
 pub mod listing;
+pub mod matching;
 pub mod openapi;
 pub mod redis_store;
 pub mod routes;

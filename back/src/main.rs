@@ -38,6 +38,22 @@ async fn main() -> anyhow::Result<()> {
         .context("application des migrations Postgres (back/migrations) — démarrage refusé")?;
     tracing::info!("migrations Postgres appliquées (_sqlx_migrations à jour)");
 
+    // Boucle de matching B7 : tâche de fond périodique (mesures ingérées ×
+    // règles actives → alert_events). Désactivable (MATCHING_INTERVAL_SECS=0) ;
+    // un tick en échec est tracé et retenté, jamais fatal (cf. matching.rs).
+    // Spawnée ICI (pas dans build_router) : les tests `spawn_app` instancient
+    // des routeurs sans boucle — pas de matching parasite pendant les e2e.
+    if cfg.matching_interval_secs > 0 {
+        tokio::spawn(quarity_back::matching::run_loop(state.clone()));
+        tracing::info!(
+            interval_secs = cfg.matching_interval_secs,
+            rules_ttl_secs = cfg.matching_rules_ttl_secs,
+            "boucle de matching démarrée"
+        );
+    } else {
+        tracing::info!("boucle de matching désactivée (MATCHING_INTERVAL_SECS=0)");
+    }
+
     let app = routes::build_router(state);
 
     let listener = tokio::net::TcpListener::bind(&cfg.bind_addr)
