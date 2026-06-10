@@ -70,6 +70,8 @@ pub fn build_router(state: AppState) -> Router {
                 .patch(alert_rules::update)
                 .delete(alert_rules::delete),
         )
+        // Force-check B7 : réévaluation immédiate d'une règle (hot path matching).
+        .route("/api/alert-rules/{id}/run", post(alert_rules::run))
         .route("/api/users", get(users::list).post(users::create))
         .route(
             "/api/users/{id}",

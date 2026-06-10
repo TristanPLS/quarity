@@ -23,6 +23,16 @@ pub struct Config {
     pub rate_limit_refresh_ip_per_min: u64,
     /// Origines autorisées pour CORS (allowlist). Vide ⇒ aucune origine cross-site (same-origin via nginx OK).
     pub cors_allowed_origins: Vec<String>,
+    /// Boucle de matching B7 : période des ticks (`MATCHING_INTERVAL_SECS`, déf. 300 ; 0 = désactivée).
+    pub matching_interval_secs: u64,
+    /// TTL du cache Moka des règles compilées (`MATCHING_RULES_TTL_SECS`, déf. 60 — « léger »).
+    pub matching_rules_ttl_secs: u64,
+    /// Profondeur du curseur initial au boot, en secondes d'`ingested_at`
+    /// (`MATCHING_LOOKBACK_SECS`, déf. 3600) — l'idempotence (0006) rend un recouvrement sûr.
+    pub matching_lookback_secs: u64,
+    /// Mesures relues au maximum par tick (`MATCHING_BATCH_LIMIT`, déf. 50000) —
+    /// si tronqué, le tick suivant reprend au curseur.
+    pub matching_batch_limit: u32,
 }
 
 impl Config {
@@ -68,6 +78,12 @@ impl Config {
                         .collect()
                 })
                 .unwrap_or_else(|_| vec!["http://localhost:3000".to_string()]),
+            matching_interval_secs: env_u64("MATCHING_INTERVAL_SECS", 300),
+            matching_rules_ttl_secs: env_u64("MATCHING_RULES_TTL_SECS", 60),
+            matching_lookback_secs: env_u64("MATCHING_LOOKBACK_SECS", 3600),
+            // u32 : la borne LIMIT ClickHouse — clampé pour rester bindable en UInt32.
+            matching_batch_limit: env_u64("MATCHING_BATCH_LIMIT", 50_000).min(u32::MAX as u64)
+                as u32,
         }))
     }
 }

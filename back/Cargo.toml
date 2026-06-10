@@ -30,6 +30,9 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 # --- Ingestion OpenAQ (binaire ingest) + timestamps des DTOs CRUD (B6) ---
 chrono = { version = "0.4", features = ["clock", "serde"] }
 
+# --- Cache L1 in-process (B7) : index des règles de matching, lookup mémoire pur ---
+moka = { version = "0.12", features = ["future"] }
+
 # --- Auth / crypto ---
 argon2       = "0.5"
 jsonwebtoken = "9"
