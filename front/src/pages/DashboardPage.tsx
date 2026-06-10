@@ -15,6 +15,7 @@ import { ApiError, PARAMETERS, type Parameter } from '../api/types'
 import { formatFull, formatTick } from '../lib/datetime'
 import { useMeasurements, type ChartPoint, type MeasurementQuery } from '../features/measurements/useMeasurements'
 import { Button } from '../components/ui'
+import { AqiOverviewSection } from '../features/aqi/AqiOverviewSection'
 import styles from './DashboardPage.module.css'
 
 const BRAND_LINE = '#1FA8B8' // Cyan respiration — accent de DONNÉE (jamais AQI)
@@ -101,9 +102,13 @@ export function DashboardPage() {
       </header>
 
       <main className={styles.main}>
+        <AqiOverviewSection />
+
         <div className={styles.head}>
-          <h1 className={styles.title}>Série temporelle</h1>
-          <p className={styles.subtitle}>Mesures OpenAQ par station, paramètre et plage de dates.</p>
+          <h2 className={styles.title}>Explorer une station</h2>
+          <p className={styles.subtitle}>
+            Série temporelle des mesures OpenAQ par station, paramètre et plage de dates.
+          </p>
         </div>
 
         <form className={styles.form} onSubmit={onSubmit}>

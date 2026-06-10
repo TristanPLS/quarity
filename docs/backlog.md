@@ -2,7 +2,7 @@
 
 > Vue d'ensemble vivante : ce qui est **fait/validé**, la **dette connue**, et les **missions à venir** par priorité.
 > Complète [`roadmap.md`](../roadmap.md) (le plan) avec l'avancement réel. Trace d'audit détaillée : [`logs/`](../logs/).
-> Dernière mise à jour : 2026-06-10 (**B6** CRUD 20 endpoints, **B7** boucle de matching → `alert_events`, puis **B8 : Redis pub/sub par org → WebSocket `/api/ws`** — voir les entrées. Pour mémoire : durcissement post-analyse #28–#33 mergé les 2026-06-08→09 ; 2026-06-07 = Jalon 3 axe BDD clos B1–B5).
+> Dernière mise à jour : 2026-06-10 (**B6** CRUD 20 endpoints, **B7** boucle de matching → `alert_events`, **B8** Redis pub/sub → WebSocket `/api/ws`, puis **B10 : 1ʳᵉ feature FRONT — vue d'ensemble AQI (jauges) + endpoint `/api/aqi`** — voir les entrées. Pour mémoire : durcissement post-analyse #28–#33 mergé les 2026-06-08→09 ; 2026-06-07 = Jalon 3 axe BDD clos B1–B5).
 
 ---
 
@@ -72,8 +72,9 @@ README, AGENTS.md, CONTRIBUTING.md, roadmap, pitch, identité, logs. *(Repo Git 
 - [ ] **B9** Profils d'exposition + calcul de dose ; API publique + clés API + quotas.
 
 **Front** :
-- [ ] **B10** Dashboard **carte + jauge AQI** (le composant `AqiBadge` est déjà prêt).
-- [ ] **B11** CRUD lieux suivis & règles d'alerte ; **client WebSocket** alertes ; profils d'exposition ; responsive.
+- [x] **B10** Dashboard **jauge AQI** — ✅ livré 2026-06-10 (logs/2026-06-10__agent-front__b10-aqi-overview.md). **Tranche verticale** : endpoint back **`GET /api/aqi`** (réutilise B5 Q2 `aqi_snapshot` via `include_str!` + découpe — **zéro SQL AQI dupliqué** ; scopé org du JWT, agrégation multi-stations **MAX/précaution**, polluant dominant, `has_data=false` distingué d'un AQI bas ; OpenAPI ; +3 tests e2e dont **AQI EPA déterministe = 71** [pm25=20] & **isolation org A/B**) + front **« Vue d'ensemble »** (grille responsive des lieux suivis, `AqiBadge` EPA + polluant dominant + détail par polluant + état « pas de mesure récente », hook `useAqiOverview`). Vérifié **live** (sophie/Agglo Riviera : 3 lieux, isolation OK ; badges colorés dès qu'il y a des mesures < 24 h → ingestion fraîche). *La carte est volontairement séparée en B10b (choix : jauges d'abord).*
+- [ ] **B10b** Dashboard **carte** des lieux suivis (marqueurs colorés par niveau AQI). Coords déjà exposées par `/api/aqi`. À trancher : Leaflet + tuiles OSM (+ CSP `img-src`) vs fond sans tuiles externes.
+- [ ] **B11** CRUD lieux suivis & règles d'alerte ; **client WebSocket** alertes (consomme enfin le push B8) ; profils d'exposition ; responsive.
 
 **Sécurité/conformité** (cf. rapport d'analyse, à instruire **avant** d'aller plus loin sur les données perso) :
 - [ ] **B12** Mini **threat model** + classification des données ; invariant **multi-tenant** testé.
