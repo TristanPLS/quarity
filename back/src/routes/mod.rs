@@ -7,6 +7,7 @@ pub mod measurements;
 pub mod organizations;
 pub mod tracked_locations;
 pub mod users;
+pub mod ws;
 
 use axum::extract::DefaultBodyLimit;
 use axum::http::{header, HeaderValue, Method};
@@ -96,6 +97,9 @@ pub fn build_router(state: AppState) -> Router {
         .merge(auth_routes)
         .merge(crud_routes)
         .route("/api/measurements", get(measurements::list_measurements))
+        // Alertes temps réel B8 : WebSocket par org (auth via jeton en query string —
+        // un navigateur ne pose pas d'en-tête Authorization sur une WebSocket native).
+        .route("/api/ws", get(ws::alerts_ws))
         // En-têtes de sécurité — API JSON only ⇒ CSP « default-src 'none' ».
         .layer(SetResponseHeaderLayer::overriding(
             header::CONTENT_SECURITY_POLICY,

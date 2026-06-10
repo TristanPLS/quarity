@@ -4,6 +4,7 @@
 //! binaire (`main.rs`) ET par les tests d'intégration (`tests/`). Aucun changement de
 //! comportement : `main.rs` consomme ce crate au lieu de redéclarer les modules.
 
+pub mod alerts;
 pub mod ch;
 pub mod config;
 pub mod db;

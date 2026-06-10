@@ -6,10 +6,12 @@ rust-version = "1.80"
 description = "Quarity — API back (walking skeleton) : auth JWT + lecture des mesures OpenAQ"
 
 [dependencies]
-# --- Web / async (axum 0.8) ---
-axum       = "0.8"
+# --- Web / async (axum 0.8) — feature `ws` : endpoint WebSocket des alertes (B8) ---
+axum       = { version = "0.8", features = ["ws"] }
 tokio      = { version = "1", features = ["full"] }
 tower-http = { version = "0.6", features = ["cors", "trace", "set-header"] }
+# --- Streams (B8) : consommation du flux Redis pub/sub des alertes (PSUBSCRIBE) ---
+futures-util = "0.3"
 
 # --- Postgres (métier) : requêtes RUNTIME (pas de macros compile-time) ---
 sqlx = { version = "0.8", default-features = false, features = [
@@ -54,6 +56,10 @@ tracing            = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 anyhow             = "1"
 thiserror          = "1"
+
+# Client WebSocket des tests e2e B8 (tests/b8_alerts.rs) — `connect` seul (ws:// sans TLS).
+[dev-dependencies]
+tokio-tungstenite = { version = "0.24", default-features = false, features = ["connect"] }
 
 [profile.release]
 strip = true

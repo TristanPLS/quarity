@@ -5,6 +5,7 @@ use std::sync::Arc;
 use redis::aio::ConnectionManager;
 use sqlx::PgPool;
 
+use crate::alerts::AlertHub;
 use crate::ch::ClickhouseClient;
 use crate::config::Config;
 
@@ -14,6 +15,8 @@ pub struct AppState {
     pub pg: PgPool,
     pub redis: ConnectionManager,
     pub ch: ClickhouseClient,
+    /// Registre des clients WebSocket d'alerte (B8), par organisation.
+    pub alerts: AlertHub,
 }
 
 impl AppState {
@@ -30,6 +33,23 @@ impl AppState {
             cfg.clickhouse_db.clone(),
         );
 
-        Ok(Self { cfg, pg, redis, ch })
+        // Alertes temps réel (B8) : registre in-process + UNE tâche d'abonnement
+        // Redis par instance (PSUBSCRIBE quarity:alerts:org:*). Spawnée ICI — donc
+        // active pour le binaire ET pour chaque instance de test (`spawn_app`) : un
+        // client WebSocket reçoit les events publiés sur SON instance. L'abonné est
+        // en LECTURE seule sur Redis (aucune écriture base), inoffensif en e2e —
+        // contrairement à la boucle de matching, qui ne tourne que dans `main.rs`.
+        let alerts = AlertHub::new(cfg.ws_client_buffer);
+        // `.await` : le PREMIER PSUBSCRIBE est synchrone — `connect` ne rend la main
+        // qu'une fois l'abonné prêt (Redis up), donc aucun « publié avant abonnement ».
+        crate::alerts::start_alert_subscriber(cfg.redis_url.clone(), alerts.clone()).await;
+
+        Ok(Self {
+            cfg,
+            pg,
+            redis,
+            ch,
+            alerts,
+        })
     }
 }
