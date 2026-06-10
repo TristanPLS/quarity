@@ -162,7 +162,7 @@ Travail en parallèle sur 4 axes.
 **Cache & temps réel** :
 
 - [X] Moka : règles d'alerte compilées, rechargées à chaque batch (TTL léger > intervalle) *(2026-06-10 — backlog B7, PR #35 : boucle de matching de seuils, index `RuleIndex` rechargé via cache Moka L1, idempotence base migration 0006)*
-- [ ] Redis pub/sub : channel par org, push WebSocket quand une mesure dépasse un seuil *(restant — backlog B8)*
+- [X] Redis pub/sub : channel par org, push WebSocket quand une mesure dépasse un seuil *(2026-06-10 — backlog B8 : publication sur `quarity:alerts:org:{org_id}` des events RÉELLEMENT insérés (boucle + force-check), endpoint `GET /api/ws?token=` authentifié par claims signés, 1 abonné PSUBSCRIBE/instance → registre in-process ; client WS front = B11)*
 - [X] Redis : rate-limit middleware (token bucket sur IP + user) + quota par clé API *(socle livré — rate-limit login email+IP sur Redis ; quota par clé API à étendre en B9)*
 
 **Sécurité** :

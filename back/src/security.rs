@@ -130,6 +130,21 @@ fn validation() -> Validation {
     v
 }
 
+/// Décode et valide un access token (HS256, expiration + leeway). Erreurs stables :
+/// `token_expired` / `invalid_token`. Partagé par l'extracteur `AuthUser` (en-tête
+/// Bearer) ET l'endpoint WebSocket B8 (jeton en query string — un navigateur ne
+/// peut pas poser d'en-tête Authorization sur une WebSocket native).
+pub fn decode_access_token(secret: &str, token: &str) -> Result<Claims, AppError> {
+    use jsonwebtoken::errors::ErrorKind::ExpiredSignature;
+    let key = DecodingKey::from_secret(secret.as_bytes());
+    decode::<Claims>(token, &key, &validation())
+        .map(|data| data.claims)
+        .map_err(|e| match e.kind() {
+            ExpiredSignature => AppError::Unauthorized("token_expired"),
+            _ => AppError::Unauthorized("invalid_token"),
+        })
+}
+
 /// Identité authentifiée, dérivée UNIQUEMENT des claims JWT.
 #[derive(Debug, Clone)]
 pub struct AuthUser {
@@ -156,15 +171,7 @@ impl FromRequestParts<AppState> for AuthUser {
             .strip_prefix("Bearer ")
             .ok_or(AppError::Unauthorized("missing_bearer"))?;
 
-        let key = DecodingKey::from_secret(state.cfg.jwt_secret.as_bytes());
-        let data = decode::<Claims>(token, &key, &validation()).map_err(|e| {
-            use jsonwebtoken::errors::ErrorKind::ExpiredSignature;
-            match e.kind() {
-                ExpiredSignature => AppError::Unauthorized("token_expired"),
-                _ => AppError::Unauthorized("invalid_token"),
-            }
-        })?;
-        let c = data.claims;
+        let c = decode_access_token(&state.cfg.jwt_secret, token)?;
 
         Ok(AuthUser {
             user_id: c.sub,

@@ -42,6 +42,7 @@ use std::sync::Arc;
 use std::time::Duration as StdDuration;
 
 use chrono::{DateTime, Duration, Utc};
+use serde::Serialize;
 use sqlx::PgPool;
 
 use crate::ch::{ClickhouseClient, NewMeasurementRow};
@@ -310,9 +311,38 @@ pub fn evaluate(index: &RuleIndex, rows: &[NewMeasurementRow]) -> Vec<Breach> {
     breaches
 }
 
+/// Événement RÉELLEMENT inséré, renvoyé par le `RETURNING` de [`insert_events`] :
+/// le snapshot figé en base. Sérialisé tel quel dans le push WebSocket (B8) —
+/// `org_id` route le message vers le bon canal/tenant.
+///
+/// `alert_rule_id`/`tracked_location_id`/`openaq_sensor_id` sont nullables en base
+/// (FK `ON DELETE SET NULL`) mais TOUJOURS posés par l'INSERT (depuis la règle
+/// compilée) — leur décodage en `i64` ne peut donc pas rencontrer de NULL ici.
+/// `fired_at` est volontairement laissé au DEFAULT `now()` (instant de persistance).
+#[derive(Debug, Clone, Serialize, sqlx::FromRow)]
+pub struct InsertedEvent {
+    pub id: i64,
+    pub alert_rule_id: i64,
+    pub org_id: i64,
+    pub tracked_location_id: i64,
+    pub ref_location_id: i64,
+    pub openaq_location_id: i64,
+    pub openaq_sensor_id: i64,
+    pub parameter_code: String,
+    pub measured_value: f64,
+    pub unit: String,
+    pub measured_at: DateTime<Utc>,
+    pub threshold_value: f64,
+    pub comparator: String,
+    pub severity: String,
+    pub fired_at: DateTime<Utc>,
+}
+
 /// Insère les événements en UN ordre SQL (UNNEST), idempotent : `ON CONFLICT
-/// DO NOTHING` sur la clé de dédup 0006. Renvoie le nombre RÉELLEMENT inséré
-/// (les rejouages comptent 0).
+/// DO NOTHING` sur la clé de dédup 0006. Le `RETURNING` renvoie EXACTEMENT les
+/// événements réellement créés (les rejouages, sautés par ON CONFLICT, ne
+/// reviennent pas) — c'est CE jeu, et lui seul, qui alimente le push B8 : publier
+/// les `Breach` bruts republierait un dépassement déjà alerté à chaque rejouage.
 ///
 /// Triggers : **T7** (BEFORE) joue pour CHAQUE ligne du lot, conflits compris —
 /// un échec (org incohérente) fait échouer TOUT le lot : voulu, un tel mismatch
@@ -320,9 +350,12 @@ pub fn evaluate(index: &RuleIndex, rows: &[NewMeasurementRow]) -> Vec<Breach> {
 /// **T6** (AFTER, compteur non-lus) ne joue que pour les lignes RÉELLEMENT
 /// insérées — une ligne sautée par ON CONFLICT n'incrémente rien (c'est
 /// exactement ce qu'on veut : pas de double comptage au rejouage).
-pub async fn insert_events(pg: &PgPool, breaches: &[Breach]) -> Result<u64, sqlx::Error> {
+pub async fn insert_events(
+    pg: &PgPool,
+    breaches: &[Breach],
+) -> Result<Vec<InsertedEvent>, sqlx::Error> {
     if breaches.is_empty() {
-        return Ok(0);
+        return Ok(Vec::new());
     }
 
     let n = breaches.len();
@@ -355,7 +388,7 @@ pub async fn insert_events(pg: &PgPool, breaches: &[Breach]) -> Result<u64, sqlx
         severities.push(b.rule.severity.clone());
     }
 
-    let res = sqlx::query(
+    let inserted = sqlx::query_as::<_, InsertedEvent>(
         r#"
         INSERT INTO alert_events
             (alert_rule_id, org_id, tracked_location_id, ref_location_id, openaq_location_id,
@@ -368,6 +401,10 @@ pub async fn insert_events(pg: &PgPool, breaches: &[Breach]) -> Result<u64, sqlx
         ON CONFLICT (alert_rule_id, openaq_sensor_id, measured_at)
             WHERE alert_rule_id IS NOT NULL
         DO NOTHING
+        RETURNING id, alert_rule_id, org_id, tracked_location_id, ref_location_id,
+                  openaq_location_id, openaq_sensor_id, parameter_code,
+                  measured_value::float8 AS measured_value, unit, measured_at,
+                  threshold_value::float8 AS threshold_value, comparator, severity, fired_at
         "#,
     )
     .bind(&rule_ids)
@@ -383,10 +420,10 @@ pub async fn insert_events(pg: &PgPool, breaches: &[Breach]) -> Result<u64, sqlx
     .bind(&thresholds)
     .bind(&comparators)
     .bind(&severities)
-    .execute(pg)
+    .fetch_all(pg)
     .await?;
 
-    Ok(res.rows_affected())
+    Ok(inserted)
 }
 
 /// Bilan d'une passe de matching.
@@ -396,8 +433,12 @@ pub struct MatchOutcome {
     pub evaluated: usize,
     /// Dépassements constatés (avant dédup en base).
     pub breaches: usize,
-    /// Événements RÉELLEMENT insérés (idempotence : rejouage ⇒ 0).
+    /// Nombre d'événements RÉELLEMENT insérés (idempotence : rejouage ⇒ 0) —
+    /// `inserted_events.len()`.
     pub inserted: u64,
+    /// Les événements réellement insérés (jeu `RETURNING`) — alimentent le push
+    /// B8 (Redis pub/sub → WebSocket). Vide au rejouage.
+    pub inserted_events: Vec<InsertedEvent>,
     /// Nouveau curseur (max `ingested_at` lu) — `None` si aucune mesure.
     pub watermark: Option<DateTime<Utc>>,
 }
@@ -448,12 +489,13 @@ pub async fn run_once(
     }
 
     let breaches = evaluate(index, &rows);
-    let inserted = insert_events(pg, &breaches).await?;
+    let inserted_events = insert_events(pg, &breaches).await?;
 
     Ok(MatchOutcome {
         evaluated: rows.len(),
         breaches: breaches.len(),
-        inserted,
+        inserted: inserted_events.len() as u64,
+        inserted_events,
         watermark,
     })
 }
@@ -477,6 +519,9 @@ pub async fn run_loop(state: AppState) {
         state.pg.clone(),
         StdDuration::from_secs(state.cfg.matching_rules_ttl_secs),
     );
+    // Connexion Redis (clonée) pour publier les alertes B8 sur le canal d'org —
+    // best-effort, séparé du chemin d'insertion (le fait persistant est en base).
+    let mut redis = state.redis.clone();
     let mut watermark = Utc::now() - Duration::seconds(state.cfg.matching_lookback_secs as i64);
 
     let mut ticker = tokio::time::interval(StdDuration::from_secs(interval_secs));
@@ -510,6 +555,11 @@ pub async fn run_loop(state: AppState) {
             Ok(outcome) => {
                 if let Some(wm) = outcome.watermark {
                     watermark = wm;
+                }
+                // Push temps réel B8 : publier les events RÉELLEMENT créés (jamais
+                // au rejouage — `inserted_events` est alors vide). Best-effort.
+                if !outcome.inserted_events.is_empty() {
+                    crate::alerts::publish_alert_events(&mut redis, &outcome.inserted_events).await;
                 }
                 if outcome.inserted > 0 {
                     tracing::info!(

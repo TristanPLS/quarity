@@ -33,6 +33,12 @@ pub struct Config {
     /// Mesures relues au maximum par tick (`MATCHING_BATCH_LIMIT`, déf. 50000) —
     /// si tronqué, le tick suivant reprend au curseur.
     pub matching_batch_limit: u32,
+    /// Cadence des pings WebSocket d'alerte (`WS_PING_INTERVAL_SECS`, déf. 30) —
+    /// garde la connexion vivante à travers le proxy (timeout nginx ~60 s).
+    pub ws_ping_interval_secs: u64,
+    /// Profondeur de file par client WebSocket (`WS_CLIENT_BUFFER`, déf. 64) — un
+    /// client lent voit ses messages les plus anciens déposés (backpressure bornée).
+    pub ws_client_buffer: usize,
 }
 
 impl Config {
@@ -84,6 +90,8 @@ impl Config {
             // u32 : la borne LIMIT ClickHouse — clampé pour rester bindable en UInt32.
             matching_batch_limit: env_u64("MATCHING_BATCH_LIMIT", 50_000).min(u32::MAX as u64)
                 as u32,
+            ws_ping_interval_secs: env_u64("WS_PING_INTERVAL_SECS", 30),
+            ws_client_buffer: env_u64("WS_CLIENT_BUFFER", 64) as usize,
         }))
     }
 }

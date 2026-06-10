@@ -568,6 +568,13 @@ pub async fn run(
     .await
     .map_err(AppError::Internal)?;
 
+    // Push temps réel B8 : un force-check qui CRÉE des événements les publie aussi
+    // (même contrat que la boucle) — uniquement les RÉELLEMENT insérés. Best-effort.
+    if !outcome.inserted_events.is_empty() {
+        let mut redis = state.redis.clone();
+        crate::alerts::publish_alert_events(&mut redis, &outcome.inserted_events).await;
+    }
+
     Ok(Json(RunOutcome {
         rule_id: id,
         evaluated: outcome.evaluated,
