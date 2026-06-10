@@ -41,3 +41,11 @@
   > 5) git push -u origin feature/front-b10-aqi-overview
   > Puis : ouvrir une PR vers `dev`, attendre la CI verte, squash merge.
   > ─────────────────────────────────────────────
+
+## Correctif post-CI — build Docker (contexte `back/`)
+
+- **Symptôme** : la PR a échoué au job **Docker — build images** : `error: couldn't read src/../../db/clickhouse/queries/rolling_regulatory.sql` pendant `cargo build --release`.
+- **Cause** : mon `include_str!("../../db/clickhouse/queries/rolling_regulatory.sql")` était dans la **lib** (`src/ch.rs`), donc résolu **à la compilation** ; or le contexte de build Docker du back est **`back/` SEUL** (`build: ./back` → le Dockerfile fait `COPY src ./src` + `COPY migrations`, mais PAS `db/`). Le même `include_str!` dans `tests/ch.rs` ne cassait pas, car `cargo build --release` **ne compile pas les tests** — la CI `cargo test` (repo complet présent) et les builds locaux passaient, masquant le défaut. Leçon : **du code de lib ne peut pas `include_str!` un fichier hors `back/`**.
+- **Correctif** : la section **Q2 est EMBARQUÉE** dans le crate — `back/src/aqi_snapshot.sql` (copié par `COPY src ./src`), exposée `pub const ch::AQI_SNAPSHOT_SQL = include_str!("aqi_snapshot.sql")`. Pour éviter la dérive avec le fichier canonique `db/clickhouse/queries/rolling_regulatory.sql` (qui reste la source des tests B5 et l'artefact « exécutable tel quel »), un **test anti-dérive** (`tests/ch.rs::embedded_aqi_sql_matches_canonical_q2`, comparaison normalisée espaces/sauts de ligne) échoue si Q2 change sans être répercuté.
+- **Vérifs** : `cargo build --release` OK (la commande exacte du Dockerfile), `clippy -D warnings`/`fmt` OK, **170 tests verts** (ch passe à 14 avec le test anti-dérive ; b10 calcule toujours 71 via la copie embarquée).
+- **Action Git (correctif sur la MÊME branche, la PR se met à jour)** : script `..\fix-b10-docker-build.cmd`.

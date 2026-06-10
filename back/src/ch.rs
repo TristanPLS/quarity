@@ -69,25 +69,18 @@ pub fn validate_parameter(p: &str) -> Option<&'static str> {
     }
 }
 
-/// Le fichier de requêtes B5 versionné — SOURCE UNIQUE (les tests `ch.rs` exécutent
-/// le MÊME fichier, découpé sur les mêmes séparateurs stables). Le handler AQI (B10)
-/// réutilise la section Q2 telle quelle : aucun SQL AQI dupliqué côté Rust.
-const REGULATORY_SQL: &str = include_str!("../../db/clickhouse/queries/rolling_regulatory.sql");
-
-/// Section **Q2 `aqi_snapshot`** du fichier versionné (du séparateur Q2 à celui de Q3 —
-/// inclut son `FORMAT JSONEachRow`). Panique au boot si les séparateurs disparaissent
-/// (régression de découpe détectée tôt, pas en prod).
-fn aqi_snapshot_sql() -> &'static str {
-    const SEP_Q2: &str = "-- ===== Q2 : aqi_snapshot =====";
-    const SEP_Q3: &str = "-- ===== Q3 : o3_daily_max_8h =====";
-    let start = REGULATORY_SQL
-        .find(SEP_Q2)
-        .expect("séparateur Q2 présent dans rolling_regulatory.sql");
-    let end = REGULATORY_SQL
-        .find(SEP_Q3)
-        .expect("séparateur Q3 présent dans rolling_regulatory.sql");
-    &REGULATORY_SQL[start..end]
-}
+/// Requête B5 **Q2 (`aqi_snapshot`) EMBARQUÉE** dans le crate (`back/src/aqi_snapshot.sql`),
+/// servie telle quelle par le handler `/api/aqi` (B10).
+///
+/// Pourquoi une COPIE embarquée plutôt qu'un `include_str!` du fichier canonique
+/// `db/clickhouse/queries/rolling_regulatory.sql` : `include_str!` est résolu **à la
+/// compilation**, or le contexte de build Docker du back est **`back/` SEUL** (le
+/// dossier `db/` n'y est pas copié) — un chemin hors-crate casse `cargo build --release`
+/// dans l'image (`back/src/aqi_snapshot.sql` est, lui, copié par `COPY src ./src`).
+/// La copie est tenue SYNCHRONE du canonique par un test de dérive
+/// (`tests/ch.rs::embedded_aqi_sql_matches_canonical_q2`, comparaison normalisée) :
+/// modifier Q2 sans répercuter ici fait ÉCHOUER la CI.
+pub const AQI_SNAPSHOT_SQL: &str = include_str!("aqi_snapshot.sql");
 
 /// Une ligne de Q2 (`aqi_snapshot`) — l'AQI US EPA d'UN polluant pour UNE station, à
 /// l'instant demandé. Champs non utilisés par B10 (window_end, rolling_avg_ugm3…)
@@ -270,7 +263,7 @@ impl ClickhouseClient {
                 ("param_loc", location_id.to_string()),
                 ("param_at", at.to_string()),
             ])
-            .body(aqi_snapshot_sql())
+            .body(AQI_SNAPSHOT_SQL)
             .send()
             .await?
             .error_for_status()?;

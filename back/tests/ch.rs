@@ -77,6 +77,25 @@ fn q4_sql() -> &'static str {
     &SQL_FILE[start..]
 }
 
+/// Anti-dérive (B10) : la requête Q2 EMBARQUÉE dans la lib
+/// (`back/src/aqi_snapshot.sql`, servie par le handler `/api/aqi` car le contexte de
+/// build Docker du back n'inclut pas `db/`) DOIT rester identique à la section Q2 du
+/// fichier canonique. Comparaison NORMALISÉE (espaces/sauts de ligne écrasés) : seule
+/// une dérive de CONTENU SQL fait échouer le test, pas une différence de fin de ligne.
+/// Test pur (aucune base) — tourne même sans ClickHouse.
+#[test]
+fn embedded_aqi_sql_matches_canonical_q2() {
+    fn norm(s: &str) -> String {
+        s.split_whitespace().collect::<Vec<_>>().join(" ")
+    }
+    assert_eq!(
+        norm(quarity_back::ch::AQI_SNAPSHOT_SQL),
+        norm(q2_sql()),
+        "back/src/aqi_snapshot.sql a DÉRIVÉ de la section Q2 de \
+         db/clickhouse/queries/rolling_regulatory.sql — répercuter la modification."
+    );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Client ClickHouse HTTP minimal (même style d'exécution que back/src/ch.rs)
 // ─────────────────────────────────────────────────────────────────────────────
