@@ -18,7 +18,7 @@ use utoipa::{Modify, OpenApi, ToSchema};
 use utoipa_swagger_ui::SwaggerUi;
 
 use crate::routes::{
-    alert_rules, auth, health, measurements, organizations, tracked_locations, users,
+    alert_rules, aqi, auth, health, measurements, organizations, tracked_locations, users,
 };
 
 /// Nom du schéma de sécurité référencé par les annotations `security(("bearer_jwt" = []))`.
@@ -40,6 +40,7 @@ const BEARER_JWT: &str = "bearer_jwt";
         auth::logout,
         auth::me,
         measurements::list_measurements,
+        aqi::overview,
         tracked_locations::list,
         tracked_locations::create,
         tracked_locations::get_one,
@@ -67,6 +68,7 @@ const BEARER_JWT: &str = "bearer_jwt";
         (name = "health", description = "Liveness / readiness du service et de ses dépendances"),
         (name = "auth", description = "Authentification JWT : login, refresh (rotation), logout, identité"),
         (name = "measurements", description = "Mesures de qualité de l'air (ClickHouse, isolation multi-tenant)"),
+        (name = "aqi", description = "AQI US EPA courant des lieux suivis (B10) — réutilise la requête B5 Q2, isolation multi-tenant"),
         (name = "tracked-locations", description = "CRUD des lieux suivis (B6) — isolation multi-tenant, 404 anti-énumération"),
         (name = "alert-rules", description = "CRUD des règles de seuil (B6) — mutations auditées (T5), isolation multi-tenant"),
         (name = "users", description = "CRUD des membres de l'organisation (B6) — gestion réservée au rôle admin"),

@@ -69,6 +69,45 @@ pub fn validate_parameter(p: &str) -> Option<&'static str> {
     }
 }
 
+/// Le fichier de requêtes B5 versionné — SOURCE UNIQUE (les tests `ch.rs` exécutent
+/// le MÊME fichier, découpé sur les mêmes séparateurs stables). Le handler AQI (B10)
+/// réutilise la section Q2 telle quelle : aucun SQL AQI dupliqué côté Rust.
+const REGULATORY_SQL: &str = include_str!("../../db/clickhouse/queries/rolling_regulatory.sql");
+
+/// Section **Q2 `aqi_snapshot`** du fichier versionné (du séparateur Q2 à celui de Q3 —
+/// inclut son `FORMAT JSONEachRow`). Panique au boot si les séparateurs disparaissent
+/// (régression de découpe détectée tôt, pas en prod).
+fn aqi_snapshot_sql() -> &'static str {
+    const SEP_Q2: &str = "-- ===== Q2 : aqi_snapshot =====";
+    const SEP_Q3: &str = "-- ===== Q3 : o3_daily_max_8h =====";
+    let start = REGULATORY_SQL
+        .find(SEP_Q2)
+        .expect("séparateur Q2 présent dans rolling_regulatory.sql");
+    let end = REGULATORY_SQL
+        .find(SEP_Q3)
+        .expect("séparateur Q3 présent dans rolling_regulatory.sql");
+    &REGULATORY_SQL[start..end]
+}
+
+/// Une ligne de Q2 (`aqi_snapshot`) — l'AQI US EPA d'UN polluant pour UNE station, à
+/// l'instant demandé. Champs non utilisés par B10 (window_end, rolling_avg_ugm3…)
+/// ignorés par serde. `is_valid`/`is_dominant` arrivent en 0/1 (UInt8 ClickHouse).
+#[derive(Debug, Deserialize)]
+pub struct AqiSnapshotRow {
+    pub parameter: String,
+    /// AQI entier (arrondi EPA), 0..=500.
+    pub aqi: i32,
+    /// Concentration glissante convertie (ppb pour o3/no2, µg/m³ sinon).
+    pub conc_value: f64,
+    pub conc_unit: String,
+    /// Couverture de la fenêtre (0..1).
+    pub coverage: f64,
+    /// Validité réglementaire (≥ 75 % de couverture) — 0/1.
+    pub is_valid: u8,
+    /// Polluant dominant du lieu (AQI = max) — 0/1.
+    pub is_dominant: u8,
+}
+
 impl ClickhouseClient {
     pub fn new(base_url: String, user: String, password: String, database: String) -> Self {
         let http = Client::builder()
@@ -206,6 +245,40 @@ impl ClickhouseClient {
         let mut out = Vec::new();
         for line in text.lines().filter(|l| !l.trim().is_empty()) {
             out.push(serde_json::from_str::<NewMeasurementRow>(line)?);
+        }
+        Ok(out)
+    }
+
+    /// AQI US EPA instantané (B5 Q2) d'UNE station OpenAQ, à l'instant `at`
+    /// (`YYYY-MM-DD hh:mm:ss[.fff]`, UTC — la requête ancre sur l'heure pleine).
+    /// Une ligne par polluant à breakpoints AYANT des données dans sa fenêtre
+    /// (24/24/8/1 h) ; aucune ligne pour un polluant/une station sans donnée récente.
+    pub async fn query_aqi_snapshot(
+        &self,
+        location_id: u64,
+        at: &str,
+    ) -> Result<Vec<AqiSnapshotRow>, ClickhouseError> {
+        let resp = self
+            .http
+            .post(&self.base_url)
+            .basic_auth(&self.user, Some(&self.password))
+            .query(&[
+                ("database", self.database.as_str()),
+                ("output_format_json_quote_64bit_integers", "0"),
+            ])
+            .query(&[
+                ("param_loc", location_id.to_string()),
+                ("param_at", at.to_string()),
+            ])
+            .body(aqi_snapshot_sql())
+            .send()
+            .await?
+            .error_for_status()?;
+
+        let text = resp.text().await?;
+        let mut out = Vec::new();
+        for line in text.lines().filter(|l| !l.trim().is_empty()) {
+            out.push(serde_json::from_str::<AqiSnapshotRow>(line)?);
         }
         Ok(out)
     }

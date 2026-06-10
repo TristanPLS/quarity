@@ -1,4 +1,4 @@
-import { ApiError, type Me, type MeasurementsQuery, type MeasurementsResponse, type TokenResponse } from './types'
+import { ApiError, type AqiOverview, type Me, type MeasurementsQuery, type MeasurementsResponse, type TokenResponse } from './types'
 import { tokenStore } from './tokenStore'
 
 // Vide par défaut => chemins relatifs /api (proxy Vite en dev, nginx en prod) => zéro CORS.
@@ -103,4 +103,7 @@ export const api = {
     })
     return request<MeasurementsResponse>(`/api/measurements?${params.toString()}`, { method: 'GET' })
   },
+
+  // AQI courant des lieux suivis de l'org (B10).
+  aqiOverview: () => request<AqiOverview>('/api/aqi', { method: 'GET' }),
 }

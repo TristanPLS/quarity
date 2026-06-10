@@ -1,6 +1,7 @@
 //! Assemblage du routeur + couches transverses.
 
 pub mod alert_rules;
+pub mod aqi;
 pub mod auth;
 pub mod health;
 pub mod measurements;
@@ -97,6 +98,8 @@ pub fn build_router(state: AppState) -> Router {
         .merge(auth_routes)
         .merge(crud_routes)
         .route("/api/measurements", get(measurements::list_measurements))
+        // AQI courant des lieux suivis (B10) — jauge du dashboard, réutilise B5 Q2.
+        .route("/api/aqi", get(aqi::overview))
         // Alertes temps réel B8 : WebSocket par org (auth via jeton en query string —
         // un navigateur ne pose pas d'en-tête Authorization sur une WebSocket native).
         .route("/api/ws", get(ws::alerts_ws))
