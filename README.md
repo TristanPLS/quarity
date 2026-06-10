@@ -12,7 +12,7 @@ Quarity permet à une **collectivité**, une **autorité sanitaire**, un **étab
 | Front | React + Vite | DX moderne, build rapide, écosystème mature |
 | BDD OLTP | PostgreSQL 16 | Users, orgs, lieux suivis, règles d'alerte, profils d'exposition, abonnements (3NF, contraintes fortes) |
 | BDD analytics | ClickHouse 24.x | Mesures OpenAQ — stockage columnar, agrégations time-series, downsampling, rollups |
-| Cache L1 | Moka | In-process, sub-ms lookup pour les règles de seuils compilées *(prévu Jalon 3 — B7, pas encore branché)* |
+| Cache L1 | Moka | In-process, sub-ms lookup pour les règles de seuils compilées *(livré le 2026-06-10 — B7, PR #35 : boucle de matching de seuils branchée)* |
 | Cache L2 / Pub-Sub | Redis 7 | Sessions, refresh tokens, rate-limit, push WebSocket |
 | Orchestration | Docker Compose | Boot en une commande |
 

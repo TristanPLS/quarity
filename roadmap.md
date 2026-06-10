@@ -152,27 +152,27 @@ Travail en parallèle sur 4 axes.
 
 **16+ endpoints REST** :
 
-- [ ] CRUD sur 4 ressources : `users`, `organizations`, `tracked_locations`, `alert_rules` (= 16+ endpoints)
-- [ ] Auth : `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`, `GET /auth/me`, `POST /auth/register`
-- [ ] Transverses : `GET /api/locations` (recherche stations OpenAQ), `GET /api/measurements/timeseries` (agg ClickHouse), `GET /api/locations/{id}/aqi`, `GET /api/rankings`, `POST /api/exposure/compute`, `POST /api/alert-rules/{id}/run` (force-check — hot path Moka)
-- [ ] Codes HTTP corrects (200, 201, 204, 400, 401, 403, 404, 409, 422, 429, 500)
-- [ ] Pagination + filtrage + tri sur tous les listings
-- [ ] Doc OpenAPI auto-générée (utoipa)
+- [X] CRUD sur 4 ressources : `users`, `organizations`, `tracked_locations`, `alert_rules` (= **20 endpoints**) *(2026-06-10 — backlog B6, PR #34 : 5 handlers × 4 ressources, 55 tests e2e)*
+- [X] Auth : `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`, `GET /auth/me` *(register écarté — choix B2B/B2G assumé : les comptes sont provisionnés par un admin d'org via `POST /api/users` + RBAC, pas d'auto-inscription)*
+- [ ] Transverses : `GET /api/measurements/timeseries` (agg ClickHouse) ✅ *J2*, `POST /api/alert-rules/{id}/run` (force-check — hot path Moka) ✅ *B7* ; **restants** : `GET /api/locations` (recherche stations OpenAQ), `GET /api/locations/{id}/aqi`, `GET /api/rankings`, `POST /api/exposure/compute`
+- [X] Codes HTTP corrects (200, 201, 204, 400, 401, 403, 404, 409, 422, 429, 500) *(2026-06-10 — B6 : codes Postgres mappés 23505→409, 23514→422)*
+- [X] Pagination + filtrage + tri sur tous les listings *(2026-06-10 — B6 : uniforme sur les 4 listings)*
+- [X] Doc OpenAPI auto-générée (utoipa) *(livrée le 2026-06-07 — backlog A2, étendue aux 20 endpoints B6)*
 
 **Cache & temps réel** :
 
-- [ ] Moka : règles d'alerte compilées, rechargées à chaque batch (TTL léger > intervalle)
-- [ ] Redis pub/sub : channel par org, push WebSocket quand une mesure dépasse un seuil
-- [ ] Redis : rate-limit middleware (token bucket sur IP + user) + quota par clé API
+- [X] Moka : règles d'alerte compilées, rechargées à chaque batch (TTL léger > intervalle) *(2026-06-10 — backlog B7, PR #35 : boucle de matching de seuils, index `RuleIndex` rechargé via cache Moka L1, idempotence base migration 0006)*
+- [ ] Redis pub/sub : channel par org, push WebSocket quand une mesure dépasse un seuil *(restant — backlog B8)*
+- [X] Redis : rate-limit middleware (token bucket sur IP + user) + quota par clé API *(socle livré — rate-limit login email+IP sur Redis ; quota par clé API à étendre en B9)*
 
 **Sécurité** :
 
-- [ ] Argon2id sur les mots de passe (pas bcrypt)
-- [ ] Validation `serde` + crate `validator` sur tous les inputs (seuils, plages de dates, coordonnées, intervalles autorisés) *(socle posé le 2026-06-07 — backlog A5 : extracteurs `ValidatedJson`/`ValidatedQuery` + endpoints existants ; à étendre aux endpoints B6+)*
-- [ ] Paramètres préparés partout (anti-injection SQL ET ClickHouse — allowlist stricte des valeurs d'`interval`/`agg`/`parameter`)
-- [ ] CORS strict (allowlist des origins front)
-- [ ] Headers via tower-http : CSP, X-Frame-Options, HSTS
-- [ ] Pas de secret dans le repo, tout en env vars ; clés API citoyennes hashées en base
+- [X] Argon2id sur les mots de passe (pas bcrypt) *(+ vérification factice à temps constant pour les emails inconnus — anti-énumération temporelle)*
+- [X] Validation `serde` + crate `validator` sur tous les inputs (seuils, plages de dates, coordonnées, intervalles autorisés) *(socle posé le 2026-06-07 — backlog A5 ; étendu aux endpoints B6 le 2026-06-10)*
+- [X] Paramètres préparés partout (anti-injection SQL ET ClickHouse — allowlist stricte des valeurs d'`interval`/`agg`/`parameter`)
+- [X] CORS strict (allowlist des origins front)
+- [X] Headers via tower-http : CSP, X-Frame-Options, HSTS
+- [X] Pas de secret dans le repo, tout en env vars *(clés API citoyennes hashées en base — prévu B9, hors périmètre Jalon 3 actuel)*
 
 ### Axe front
 
