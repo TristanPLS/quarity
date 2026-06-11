@@ -33,6 +33,36 @@ pub fn hash_password(password: &str) -> anyhow::Result<String> {
     Ok(hash.to_string())
 }
 
+/// Encode des octets en hexadécimal minuscule.
+fn to_hex(bytes: &[u8]) -> String {
+    use std::fmt::Write;
+    let mut s = String::with_capacity(bytes.len() * 2);
+    for b in bytes {
+        let _ = write!(s, "{b:02x}");
+    }
+    s
+}
+
+/// Génère une clé API (B9b) : renvoie `(secret_en_clair, token_prefix, token_hash)`.
+/// Le secret (`qrt_<48 hex>`, 192 bits) n'est montré qu'UNE fois à la création ; seul le
+/// **hash** est stocké. Haute entropie ⇒ **SHA-256** (déterministe, lookup O(1) via
+/// `api_tokens.token_hash`) — argon2 (salé/lent) est réservé aux mots de passe.
+pub fn generate_api_key() -> (String, String, String) {
+    use argon2::password_hash::rand_core::RngCore;
+    let mut bytes = [0u8; 24];
+    OsRng.fill_bytes(&mut bytes);
+    let secret = format!("qrt_{}", to_hex(&bytes));
+    let prefix = secret[..8].to_string(); // "qrt_" + 4 hex — en clair pour l'affichage
+    let hash = hash_api_key(&secret);
+    (secret, prefix, hash)
+}
+
+/// Hash SHA-256 (hex) d'une clé API présentée — sert au lookup `api_tokens.token_hash`.
+pub fn hash_api_key(secret: &str) -> String {
+    use sha2::{Digest, Sha256};
+    to_hex(&Sha256::digest(secret.as_bytes()))
+}
+
 /// Hash factice constant (calculé une seule fois, mêmes paramètres que les vrais hashes).
 /// Sert UNIQUEMENT à la vérification factice anti-énumération ci-dessous.
 static DUMMY_PHC_HASH: LazyLock<String> = LazyLock::new(|| {
@@ -232,7 +262,7 @@ impl FromRequestParts<AppState> for RequireAdmin {
 
 #[cfg(test)]
 mod tests {
-    use super::{client_ip, dummy_verify_password};
+    use super::{client_ip, dummy_verify_password, generate_api_key, hash_api_key};
     use axum::http::HeaderMap;
 
     #[test]
@@ -268,5 +298,21 @@ mod tests {
         // Vérification factice : doit s'exécuter sans panic, quel que soit le mot de passe.
         dummy_verify_password("n'importe quoi");
         dummy_verify_password("");
+    }
+
+    #[test]
+    fn api_key_generation_and_hash() {
+        let (secret, prefix, hash) = generate_api_key();
+        assert!(secret.starts_with("qrt_"), "préfixe : {secret}");
+        assert_eq!(secret.len(), 52, "qrt_ + 48 hex");
+        assert_eq!(prefix, secret[..8], "prefix = 8 premiers caractères");
+        assert_eq!(hash.len(), 64, "SHA-256 en hex");
+        assert_ne!(hash, secret, "le hash n'est pas le secret en clair");
+        // Déterministe : re-hasher le secret redonne le même hash (lookup possible).
+        assert_eq!(hash_api_key(&secret), hash);
+        // Deux clés générées diffèrent (secret ET hash).
+        let (secret2, _, hash2) = generate_api_key();
+        assert_ne!(secret, secret2);
+        assert_ne!(hash, hash2);
     }
 }
