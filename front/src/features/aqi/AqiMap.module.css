@@ -1,0 +1,21 @@
+.wrap {
+  margin-bottom: var(--space-5, 20px);
+  border: 1px solid var(--border, #2a2f3a);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+/* Leaflet exige une hauteur explicite sur le conteneur, sinon la carte ne s'affiche pas. */
+.map {
+  height: 360px;
+  width: 100%;
+  /* Reste sous d'éventuels overlays/menus du SPA. */
+  z-index: 0;
+}
+
+/* Lisibilité du popup sur le thème de l'app (Leaflet impose un fond clair par défaut). */
+.wrap :global(.leaflet-popup-content) {
+  font-family: var(--font-sans, system-ui);
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
