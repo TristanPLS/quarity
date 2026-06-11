@@ -101,6 +101,38 @@ pub struct AqiSnapshotRow {
     pub is_dominant: u8,
 }
 
+/// Requête de dose d'exposition (B9a-3) EMBARQUÉE (`back/src/exposure_dose.sql`),
+/// copie synchrone du canonique `db/clickhouse/queries/exposure_dose.sql` (test de
+/// dérive `tests/ch.rs::embedded_exposure_dose_sql_matches_canonical` ; même raison
+/// que `AQI_SNAPSHOT_SQL` : build Docker du back = `back/` seul).
+pub const EXPOSURE_DOSE_SQL: &str = include_str!("exposure_dose.sql");
+
+/// Résultat brut de la requête de dose : heures > seuil et heures évaluées (couverture).
+#[derive(Debug, Deserialize)]
+pub struct DoseRow {
+    pub hours_over_threshold: u64,
+    pub sample_count: u64,
+}
+
+/// Paramètres de la requête de dose (cf. `exposure_dose.sql`).
+pub struct DoseParams<'a> {
+    /// Stations openaq du lieu (règle MAX multi-stations).
+    pub locs: &'a [i64],
+    pub parameter: &'a str,
+    /// Fenêtre de moyennage en heures (1 / 8 / 24).
+    pub avg_hours: u32,
+    pub threshold: f64,
+    /// Bornes de période, dates locales `YYYY-MM-DD` (incluses).
+    pub from: &'a str,
+    pub to: &'a str,
+    /// Plage horaire quotidienne en minutes du jour `[start, end)`.
+    pub start_min: u16,
+    pub end_min: u16,
+    /// Bitmask des jours (bit0=Lundi … bit6=Dimanche).
+    pub days_mask: i16,
+    pub tz: &'a str,
+}
+
 impl ClickhouseClient {
     pub fn new(base_url: String, user: String, password: String, database: String) -> Self {
         let http = Client::builder()
@@ -274,5 +306,55 @@ impl ClickhouseClient {
             out.push(serde_json::from_str::<AqiSnapshotRow>(line)?);
         }
         Ok(out)
+    }
+
+    /// Dose d'exposition (B9a-3) : heures où la concentration glissante MAX multi-stations
+    /// dépasse le seuil, dans la plage horaire locale du profil, sur la période. L'agrégat
+    /// (sans GROUP BY) renvoie TOUJOURS une ligne — `0/0` si aucune donnée.
+    pub async fn query_exposure_dose(
+        &self,
+        p: &DoseParams<'_>,
+    ) -> Result<DoseRow, ClickhouseError> {
+        let locs = format!(
+            "[{}]",
+            p.locs
+                .iter()
+                .map(|l| l.to_string())
+                .collect::<Vec<_>>()
+                .join(",")
+        );
+        let resp = self
+            .http
+            .post(&self.base_url)
+            .basic_auth(&self.user, Some(&self.password))
+            .query(&[
+                ("database", self.database.as_str()),
+                ("output_format_json_quote_64bit_integers", "0"),
+            ])
+            .query(&[
+                ("param_locs", locs),
+                ("param_param", p.parameter.to_string()),
+                ("param_avg_hours", p.avg_hours.to_string()),
+                ("param_threshold", p.threshold.to_string()),
+                ("param_from", p.from.to_string()),
+                ("param_to", p.to.to_string()),
+                ("param_start_min", p.start_min.to_string()),
+                ("param_end_min", p.end_min.to_string()),
+                ("param_days_mask", p.days_mask.to_string()),
+                ("param_tz", p.tz.to_string()),
+            ])
+            .body(EXPOSURE_DOSE_SQL)
+            .send()
+            .await?
+            .error_for_status()?;
+
+        let text = resp.text().await?;
+        if let Some(line) = text.lines().find(|l| !l.trim().is_empty()) {
+            return Ok(serde_json::from_str::<DoseRow>(line)?);
+        }
+        Ok(DoseRow {
+            hours_over_threshold: 0,
+            sample_count: 0,
+        })
     }
 }

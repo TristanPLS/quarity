@@ -30,6 +30,8 @@ use serde_json::Value;
 // ─────────────────────────────────────────────────────────────────────────────
 
 const SQL_FILE: &str = include_str!("../../db/clickhouse/queries/rolling_regulatory.sql");
+/// Canonique de la dose (B9a-3) — comparé à la copie embarquée `ch::EXPOSURE_DOSE_SQL`.
+const EXPOSURE_DOSE_CANONICAL: &str = include_str!("../../db/clickhouse/queries/exposure_dose.sql");
 const SEP_Q1: &str = "-- ===== Q1 : rolling_regulatory =====";
 const SEP_Q2: &str = "-- ===== Q2 : aqi_snapshot =====";
 const SEP_Q3: &str = "-- ===== Q3 : o3_daily_max_8h =====";
@@ -93,6 +95,22 @@ fn embedded_aqi_sql_matches_canonical_q2() {
         norm(q2_sql()),
         "back/src/aqi_snapshot.sql a DÉRIVÉ de la section Q2 de \
          db/clickhouse/queries/rolling_regulatory.sql — répercuter la modification."
+    );
+}
+
+/// Anti-dérive (B9a-3) : la requête de dose EMBARQUÉE (`back/src/exposure_dose.sql`)
+/// DOIT rester identique au canonique `db/clickhouse/queries/exposure_dose.sql`. Même
+/// raison que l'AQI (build Docker du back = `back/` seul). Test pur.
+#[test]
+fn embedded_exposure_dose_sql_matches_canonical() {
+    fn norm(s: &str) -> String {
+        s.split_whitespace().collect::<Vec<_>>().join(" ")
+    }
+    assert_eq!(
+        norm(quarity_back::ch::EXPOSURE_DOSE_SQL),
+        norm(EXPOSURE_DOSE_CANONICAL),
+        "back/src/exposure_dose.sql a DÉRIVÉ du canonique \
+         db/clickhouse/queries/exposure_dose.sql — répercuter la modification."
     );
 }
 
