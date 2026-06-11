@@ -110,7 +110,13 @@ pub async fn overview(
     State(state): State<AppState>,
     user: AuthUser,
 ) -> Result<Json<AqiOverview>, AppError> {
-    // 1. Lieux ACTIFS de l'org + leurs stations + coords — SCOPÉ org du JWT (isolation).
+    Ok(Json(overview_for_org(&state, user.org_id).await?))
+}
+
+/// Cœur de la vue d'ensemble AQI d'une org — partagé entre `/api/aqi` (JWT) et
+/// `/api/public/aqi` (clé API, B9b-2). `org_id` provient TOUJOURS de l'auth (isolation).
+pub async fn overview_for_org(state: &AppState, org_id: i64) -> Result<AqiOverview, AppError> {
+    // 1. Lieux ACTIFS de l'org + leurs stations + coords — SCOPÉ org (isolation).
     let rows: Vec<StationRow> = sqlx::query_as(
         r#"
         SELECT tl.id, tl.name, rl.openaq_location_id, rl.latitude::float8, rl.longitude::float8
@@ -121,7 +127,7 @@ pub async fn overview(
         ORDER BY tl.id, rl.openaq_location_id
         "#,
     )
-    .bind(user.org_id)
+    .bind(org_id)
     .fetch_all(&state.pg)
     .await?;
 
@@ -232,8 +238,8 @@ pub async fn overview(
         });
     }
 
-    Ok(Json(AqiOverview {
+    Ok(AqiOverview {
         computed_at: now.to_rfc3339_opts(SecondsFormat::Secs, true),
         data,
-    }))
+    })
 }
