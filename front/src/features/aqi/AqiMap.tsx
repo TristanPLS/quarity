@@ -37,6 +37,36 @@ export function AqiMap({ locations }: { locations: LocationAqi[] }) {
     [located],
   )
 
+  // Des lieux peuvent partager une station (ou être au même point) ⇒ marqueurs superposés,
+  // l'un cache l'autre. On décale les co-localisés en petit cercle (~100 m) — déterministe,
+  // popup inchangée. (Au vrai zoom carte, l'écart est discret mais sépare les pastilles.)
+  const positioned = useMemo(() => {
+    const groups = new Map<string, Located[]>()
+    for (const l of located) {
+      const key = `${l.latitude.toFixed(5)},${l.longitude.toFixed(5)}`
+      const g = groups.get(key)
+      if (g) g.push(l)
+      else groups.set(key, [l])
+    }
+    const out: { loc: Located; center: [number, number] }[] = []
+    for (const group of groups.values()) {
+      if (group.length === 1) {
+        const l = group[0]
+        out.push({ loc: l, center: [l.latitude, l.longitude] })
+      } else {
+        const radius = 0.0011
+        group.forEach((l, i) => {
+          const angle = (2 * Math.PI * i) / group.length
+          out.push({
+            loc: l,
+            center: [l.latitude + radius * Math.cos(angle), l.longitude + radius * Math.sin(angle)],
+          })
+        })
+      }
+    }
+    return out
+  }, [located])
+
   if (located.length === 0) return null
 
   return (
@@ -52,13 +82,13 @@ export function AqiMap({ locations }: { locations: LocationAqi[] }) {
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         />
-        {located.map((loc) => {
+        {positioned.map(({ loc, center }) => {
           const aqi = loc.has_data ? loc.overall_aqi : null
           const color = aqi != null ? AQI_COLORS[aqiLevelFromValue(aqi)] : NO_DATA_COLOR
           return (
             <CircleMarker
               key={loc.tracked_location_id}
-              center={[loc.latitude, loc.longitude]}
+              center={center}
               radius={10}
               pathOptions={{ color: '#1A1A1A', weight: 1, fillColor: color, fillOpacity: 0.9 }}
             >
