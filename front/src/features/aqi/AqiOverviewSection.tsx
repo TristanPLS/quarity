@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { AqiBadge, aqiLevelFromValue, Badge } from '../../components/ui'
 import { paramLabel, type LocationAqi } from '../../api/types'
 import { useAqiOverview } from './useAqiOverview'
+import { AqiMap } from './AqiMap'
 import styles from './AqiOverview.module.css'
 
 function formatComputedAt(iso: string): string {
@@ -60,11 +61,14 @@ export function AqiOverviewSection() {
       )}
 
       {status === 'success' && locations.length > 0 && (
-        <div className={styles.grid}>
-          {locations.map((loc) => (
-            <AqiCard key={loc.tracked_location_id} loc={loc} />
-          ))}
-        </div>
+        <>
+          <AqiMap locations={locations} />
+          <div className={styles.grid}>
+            {locations.map((loc) => (
+              <AqiCard key={loc.tracked_location_id} loc={loc} />
+            ))}
+          </div>
+        </>
       )}
     </section>
   )
