@@ -16,6 +16,7 @@ import { formatFull, formatTick } from '../lib/datetime'
 import { useMeasurements, type ChartPoint, type MeasurementQuery } from '../features/measurements/useMeasurements'
 import { Button } from '../components/ui'
 import { AqiOverviewSection } from '../features/aqi/AqiOverviewSection'
+import { AlertsPanel } from '../features/alerts/AlertsPanel'
 import styles from './DashboardPage.module.css'
 
 const BRAND_LINE = '#1FA8B8' // Cyan respiration — accent de DONNÉE (jamais AQI)
@@ -102,6 +103,8 @@ export function DashboardPage() {
       </header>
 
       <main className={styles.main}>
+        <AlertsPanel />
+
         <AqiOverviewSection />
 
         <div className={styles.head}>

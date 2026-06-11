@@ -85,6 +85,31 @@ export interface AqiOverview {
   data: LocationAqi[]
 }
 
+// --- Alertes temps réel (B8/B8b → consommées en B11a via WebSocket /api/ws) ---
+/** Événement d'alerte poussé sur la WebSocket (miroir de `InsertedEvent` côté back). */
+export interface AlertEvent {
+  id: number
+  alert_rule_id: number
+  org_id: number
+  tracked_location_id: number
+  openaq_location_id: number
+  openaq_sensor_id: number
+  parameter_code: string
+  measured_value: number
+  unit: string
+  measured_at: string
+  threshold_value: number
+  comparator: string
+  severity: string
+  fired_at: string
+}
+
+/** Enveloppe des messages WebSocket (`type` discrimine d'éventuels futurs types). */
+export interface AlertMessage {
+  type: 'alert'
+  event: AlertEvent
+}
+
 // --- Erreur API normalisée ---
 export class ApiError extends Error {
   constructor(
