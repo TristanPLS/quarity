@@ -13,13 +13,13 @@
 use axum::http::{header, HeaderValue};
 use axum::Router;
 use tower_http::set_header::SetResponseHeaderLayer;
-use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
+use utoipa::openapi::security::{ApiKey, ApiKeyValue, HttpAuthScheme, HttpBuilder, SecurityScheme};
 use utoipa::{Modify, OpenApi, ToSchema};
 use utoipa_swagger_ui::SwaggerUi;
 
 use crate::routes::{
     alert_rules, api_keys, aqi, auth, exposure_dose, exposure_profiles, health, measurements,
-    organizations, tracked_location_profiles, tracked_locations, users,
+    organizations, public_api, tracked_location_profiles, tracked_locations, users,
 };
 
 /// Nom du schéma de sécurité référencé par les annotations `security(("bearer_jwt" = []))`.
@@ -71,6 +71,8 @@ const BEARER_JWT: &str = "bearer_jwt";
         api_keys::create,
         api_keys::list,
         api_keys::revoke,
+        public_api::aqi,
+        public_api::measurements,
         users::list,
         users::create,
         users::get_one,
@@ -92,6 +94,7 @@ const BEARER_JWT: &str = "bearer_jwt";
         (name = "alert-rules", description = "CRUD des règles de seuil (B6) — mutations auditées (T5), isolation multi-tenant"),
         (name = "exposure-profiles", description = "CRUD des profils d'exposition et seuils adaptés (B9a) — profils système partagés + custom par org, isolation multi-tenant"),
         (name = "api-keys", description = "Clés API de l'organisation (B9b) — émission (secret affiché une fois, stocké hashé), listing, révocation ; réservé au rôle admin"),
+        (name = "public-api", description = "API publique read-only (B9b) — authentifiée par clé API (en-tête X-API-Key), scopée à l'org de la clé, quota/rate-limit par abonnement"),
         (name = "users", description = "CRUD des membres de l'organisation (B6) — gestion réservée au rôle admin"),
         (name = "organizations", description = "CRUD des organisations de l'appelant (B6) — rôle re-résolu par org, soft-delete"),
     )
@@ -113,6 +116,11 @@ impl Modify for SecurityAddon {
                     .bearer_format("JWT")
                     .build(),
             ),
+        );
+        // Clé API de l'API publique B9b-2 (en-tête X-API-Key).
+        components.add_security_scheme(
+            "api_key",
+            SecurityScheme::ApiKey(ApiKey::Header(ApiKeyValue::new("X-API-Key"))),
         );
     }
 }

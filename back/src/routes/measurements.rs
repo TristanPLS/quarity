@@ -70,12 +70,25 @@ pub async fn list_measurements(
     user: AuthUser,
     ValidatedQuery(q): ValidatedQuery<MeasurementsQuery>,
 ) -> Result<Json<serde_json::Value>, AppError> {
+    Ok(Json(
+        measurements_page_for_org(&state, user.org_id, &q).await?,
+    ))
+}
+
+/// Cœur de la lecture de mesures d'une org — partagé entre `/api/measurements` (JWT) et
+/// `/api/public/measurements` (clé API, B9b-2). `org_id` provient TOUJOURS de l'auth ;
+/// 403 si la station n'est pas suivie par l'org (isolation multi-tenant).
+pub async fn measurements_page_for_org(
+    state: &AppState,
+    org_id: i64,
+    q: &MeasurementsQuery,
+) -> Result<serde_json::Value, AppError> {
     let parameter = validate_parameter(&q.parameter).ok_or(AppError::BadRequest(
         "parameter invalide (allowlist : pm25, pm10, no2, o3, so2, co)".into(),
     ))?;
 
-    // Isolation multi-tenant : l'org du JWT doit suivre cette station.
-    let owns = crate::db::org_owns_location(&state.pg, user.org_id, q.location_id as i64).await?;
+    // Isolation multi-tenant : l'org doit suivre cette station.
+    let owns = crate::db::org_owns_location(&state.pg, org_id, q.location_id as i64).await?;
     if !owns {
         return Err(AppError::Forbidden("location_not_in_org"));
     }
@@ -93,10 +106,10 @@ pub async fn list_measurements(
         .query_measurements(q.location_id, parameter, &q.from, &q.to, page_size, offset)
         .await?;
 
-    Ok(Json(json!({
+    Ok(json!({
         "page": page,
         "page_size": page_size,
         "count": rows.len(),
         "data": rows,
-    })))
+    }))
 }

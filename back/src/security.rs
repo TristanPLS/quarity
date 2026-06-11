@@ -6,6 +6,7 @@ use argon2::Argon2;
 use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
 use axum::http::HeaderMap;
+use chrono::Utc;
 use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use std::sync::LazyLock;
@@ -257,6 +258,106 @@ impl FromRequestParts<AppState> for RequireAdmin {
             return Err(AppError::Forbidden("admin_required"));
         }
         Ok(RequireAdmin(user))
+    }
+}
+
+/// Identité dérivée d'une **clé API** (B9b-2), pour l'API publique. Résolue depuis
+/// l'en-tête `X-API-Key: qrt_…` (distinct du Bearer JWT) :
+/// 1. hash SHA-256 → lookup d'une clé NON révoquée (index partiel) ; rejet expirée → **401** ;
+/// 2. **rate-limit/minute** + **quota mensuel** (compteurs Redis, fenêtre fixe) selon le plan
+///    de l'abonnement ACTIF de l'org (défaut « free » si aucun) — `0 = illimité` ; dépassement → **429** ;
+/// 3. `last_used_at` mis à jour best-effort.
+///
+/// L'`org_id` vient de la CLÉ, jamais d'un paramètre client (isolation multi-tenant).
+pub struct ApiKeyAuth {
+    pub org_id: i64,
+    pub scope: String,
+    pub token_id: i64,
+}
+
+impl FromRequestParts<AppState> for ApiKeyAuth {
+    type Rejection = AppError;
+
+    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, AppError> {
+        let presented = parts
+            .headers
+            .get("x-api-key")
+            .and_then(|h| h.to_str().ok())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .ok_or(AppError::Unauthorized("missing_api_key"))?;
+
+        // Clé VIVE (non révoquée) par hash — sert l'index partiel unique sur token_hash.
+        let token_hash = hash_api_key(presented);
+        let row: Option<(i64, i64, String, Option<chrono::DateTime<Utc>>)> = sqlx::query_as(
+            "SELECT id, org_id, scope, expires_at FROM api_tokens \
+             WHERE token_hash = $1 AND revoked_at IS NULL",
+        )
+        .bind(&token_hash)
+        .fetch_optional(&state.pg)
+        .await
+        .map_err(|e| AppError::Internal(e.into()))?;
+        let (token_id, org_id, scope, expires_at) =
+            row.ok_or(AppError::Unauthorized("invalid_api_key"))?;
+
+        if matches!(expires_at, Some(exp) if exp < Utc::now()) {
+            return Err(AppError::Unauthorized("api_key_expired"));
+        }
+
+        // Limites du plan de l'abonnement ACTIF (défaut free si aucun). 0 = illimité.
+        let (monthly_quota, rate_per_min): (i32, i32) = sqlx::query_as(
+            "SELECT sp.monthly_request_quota, sp.rate_limit_per_min \
+             FROM organization_subscriptions os \
+             JOIN subscription_plans sp ON sp.id = os.plan_id \
+             WHERE os.org_id = $1 AND os.status = 'active'",
+        )
+        .bind(org_id)
+        .fetch_optional(&state.pg)
+        .await
+        .map_err(|e| AppError::Internal(e.into()))?
+        .unwrap_or((1000, 30));
+
+        // Compteurs Redis « fenêtre fixe » par clé : rate-limit/min, puis quota du mois
+        // courant (clé suffixée du mois → repart de zéro au changement de mois).
+        // POLITIQUE assumée : TOUTE requête AUTHENTIFIÉE compte — y compris celles qui
+        // finiront en 4xx côté handler (ex. station étrangère → 403). Conservateur ANTI-ABUS
+        // (un attaquant ne peut pas sonder l'API sans consommer son propre quota) ; le coût
+        // d'un quota « gâché » par une requête mal formée d'un client légitime est mineur.
+        let mut redis = state.redis.clone();
+        if rate_per_min > 0 {
+            let n = crate::redis_store::rate_limit_hit(
+                &mut redis,
+                &format!("apikey:rl:{token_id}"),
+                60,
+            )
+            .await
+            .map_err(|e| AppError::Internal(e.into()))?;
+            if n > rate_per_min as u64 {
+                return Err(AppError::TooManyRequests("rate-limit par minute depasse"));
+            }
+        }
+        if monthly_quota > 0 {
+            let month = Utc::now().format("%Y%m").to_string();
+            let key = format!("apikey:quota:{token_id}:{month}");
+            let n = crate::redis_store::rate_limit_hit(&mut redis, &key, 35 * 86_400)
+                .await
+                .map_err(|e| AppError::Internal(e.into()))?;
+            if n > monthly_quota as u64 {
+                return Err(AppError::TooManyRequests("quota mensuel depasse"));
+            }
+        }
+
+        // Trace d'usage best-effort (échec non bloquant).
+        let _ = sqlx::query("UPDATE api_tokens SET last_used_at = now() WHERE id = $1")
+            .bind(token_id)
+            .execute(&state.pg)
+            .await;
+
+        Ok(ApiKeyAuth {
+            org_id,
+            scope,
+            token_id,
+        })
     }
 }
 

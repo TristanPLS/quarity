@@ -9,6 +9,7 @@ pub mod exposure_profiles;
 pub mod health;
 pub mod measurements;
 pub mod organizations;
+pub mod public_api;
 pub mod tracked_location_profiles;
 pub mod tracked_locations;
 pub mod users;
@@ -146,6 +147,9 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/measurements", get(measurements::list_measurements))
         // AQI courant des lieux suivis (B10) — jauge du dashboard, réutilise B5 Q2.
         .route("/api/aqi", get(aqi::overview))
+        // API PUBLIQUE (B9b-2) : read-only, auth par clé API (X-API-Key), quota par abo.
+        .route("/api/public/aqi", get(public_api::aqi))
+        .route("/api/public/measurements", get(public_api::measurements))
         // Alertes temps réel B8 : WebSocket par org (auth via jeton en query string —
         // un navigateur ne pose pas d'en-tête Authorization sur une WebSocket native).
         .route("/api/ws", get(ws::alerts_ws))
