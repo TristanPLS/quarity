@@ -35,7 +35,7 @@
 //! publie — pas de doublon côté client.
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -43,8 +43,14 @@ use futures_util::StreamExt;
 use redis::aio::ConnectionManager;
 use serde::Serialize;
 use tokio::sync::mpsc;
+use tokio_util::sync::CancellationToken;
 
 use crate::matching::InsertedEvent;
+
+/// Concurrence MAX des `PUBLISH` d'un même lot d'alertes (B8b) : la `ConnectionManager`
+/// est multiplexée (clones bon marché) — publier en éventail borné évite la latence
+/// d'une chaîne d'`await` séquentiels sur un gros lot, sans inonder Redis.
+const MAX_CONCURRENT_PUBLISH: usize = 16;
 
 /// Préfixe des canaux Redis (namespacé « quarity » : un Redis partagé avec un
 /// autre service ne collisionne pas).
@@ -81,52 +87,93 @@ pub struct AlertHub {
     next_id: Arc<AtomicU64>,
     /// Profondeur de file par client (backpressure bornée).
     buffer: usize,
+    /// Connexions simultanées MAX par org (durcissement B8b) — au-delà, `register`
+    /// refuse : un tenant authentifié ne peut pas épuiser la mémoire du back.
+    max_per_org: usize,
+    /// Connexions actives, toutes orgs confondues — gauge d'observabilité (B8b).
+    /// Maintenu SOUS le verrou `subscribers` (incrément à l'insertion, décrément au
+    /// retrait) : il reste donc cohérent avec le registre, sans fenêtre off-by-one.
+    active: Arc<AtomicUsize>,
+    /// Messages d'alerte DÉPOSÉS (client lent/plein/fermé) — compteur d'observabilité (B8b).
+    dropped: Arc<AtomicU64>,
 }
 
 impl AlertHub {
-    pub fn new(buffer: usize) -> Self {
+    pub fn new(buffer: usize, max_per_org: usize) -> Self {
         Self {
             subscribers: Arc::new(Mutex::new(HashMap::new())),
             next_id: Arc::new(AtomicU64::new(0)),
             buffer: buffer.max(1),
+            max_per_org: max_per_org.max(1),
+            active: Arc::new(AtomicUsize::new(0)),
+            dropped: Arc::new(AtomicU64::new(0)),
         }
     }
 
-    /// Enregistre un client de l'org `org_id` ; renvoie son id (pour le
-    /// désenregistrer) et le récepteur d'où le handler WebSocket lira les messages.
-    pub fn register(&self, org_id: i64) -> (u64, mpsc::Receiver<String>) {
+    /// Enregistre un client de l'org `org_id` **si** le cap par org n'est pas atteint.
+    /// `Some((id, rx))` : id pour le désenregistrer, récepteur d'où le handler lira les
+    /// messages. `None` : limite atteinte — l'appelant ferme la WebSocket (Close 1008).
+    ///
+    /// Le contrôle est ATOMIQUE (un seul tour de verrou) : deux handshakes concurrents
+    /// ne peuvent pas dépasser le cap. On ne crée l'entrée d'org (`or_default`) qu'à
+    /// l'insertion EFFECTIVE — un refus ne laisse jamais d'entrée vide derrière lui.
+    pub fn register(&self, org_id: i64) -> Option<(u64, mpsc::Receiver<String>)> {
+        let mut guard = self.subscribers.lock().expect("verrou AlertHub");
+        let current = guard.get(&org_id).map_or(0, HashMap::len);
+        if current >= self.max_per_org {
+            tracing::warn!(
+                org_id,
+                max = self.max_per_org,
+                "connexion WebSocket refusée — limite de connexions par organisation atteinte"
+            );
+            return None;
+        }
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let (tx, rx) = mpsc::channel(self.buffer);
-        self.subscribers
-            .lock()
-            .expect("verrou AlertHub")
-            .entry(org_id)
-            .or_default()
-            .insert(id, tx);
-        (id, rx)
+        guard.entry(org_id).or_default().insert(id, tx);
+        // Incrément SOUS le verrou (comme le décrément d'`unregister`) : `active`
+        // reste exactement cohérent avec le registre, jamais d'off-by-one transitoire.
+        let active = self.active.fetch_add(1, Ordering::Relaxed) + 1;
+        let org_clients = current + 1;
+        drop(guard);
+        tracing::debug!(org_id, org_clients, active, "client WebSocket enregistré");
+        Some((id, rx))
     }
 
     /// Retire un client (à la fermeture de sa WebSocket) ; vide l'entrée d'org
-    /// devenue sans client.
+    /// devenue sans client et décrémente le compteur de connexions actives.
     pub fn unregister(&self, org_id: i64, id: u64) {
         let mut guard = self.subscribers.lock().expect("verrou AlertHub");
         if let Some(clients) = guard.get_mut(&org_id) {
-            clients.remove(&id);
+            if clients.remove(&id).is_some() {
+                self.active.fetch_sub(1, Ordering::Relaxed);
+            }
             if clients.is_empty() {
                 guard.remove(&org_id);
             }
         }
     }
 
+    /// Connexions WebSocket actives (toutes orgs) — observabilité / tests.
+    pub fn active_connections(&self) -> usize {
+        self.active.load(Ordering::Relaxed)
+    }
+
+    /// Messages d'alerte déposés depuis le démarrage (client lent/fermé) — observabilité.
+    pub fn dropped_messages(&self) -> u64 {
+        self.dropped.load(Ordering::Relaxed)
+    }
+
     /// Distribue un message (déjà sérialisé) à tous les clients de l'org. `try_send`
-    /// NON bloquant : un client plein (lent) ou fermé voit le message DÉPOSÉ — jamais
-    /// d'attente, jamais de mémoire qui gonfle (le verrou n'est tenu qu'un instant,
-    /// aucun `await` dessous).
+    /// NON bloquant : un client plein (lent) ou fermé voit le message DÉPOSÉ (compté) —
+    /// jamais d'attente, jamais de mémoire qui gonfle (le verrou n'est tenu qu'un
+    /// instant, aucun `await` dessous).
     fn dispatch(&self, org_id: i64, payload: &str) {
         let guard = self.subscribers.lock().expect("verrou AlertHub");
         if let Some(clients) = guard.get(&org_id) {
             for tx in clients.values() {
                 if tx.try_send(payload.to_string()).is_err() {
+                    self.dropped.fetch_add(1, Ordering::Relaxed);
                     tracing::debug!(org_id, "client WS lent ou fermé — message d'alerte déposé");
                 }
             }
@@ -135,33 +182,38 @@ impl AlertHub {
 }
 
 /// Publie les événements RÉELLEMENT insérés sur leur canal d'org (un PUBLISH par
-/// event). Best-effort : une erreur Redis est tracée puis ignorée — l'événement
-/// reste en base (fait persistant), seul le push live est perdu. Utilise la
-/// `ConnectionManager` partagée (PUBLISH est une commande ordinaire, pas une
-/// souscription).
-pub async fn publish_alert_events(redis: &mut ConnectionManager, events: &[InsertedEvent]) {
-    for event in events {
-        let payload = match serde_json::to_string(&AlertMessage {
-            kind: "alert",
-            event,
-        }) {
-            Ok(p) => p,
-            Err(e) => {
-                tracing::warn!(error = %e, "sérialisation d'une alerte échouée — non publiée");
-                continue;
+/// event), **en éventail borné** ([`MAX_CONCURRENT_PUBLISH`]) — la `ConnectionManager`
+/// est multiplexée et clonable à bas coût (B8b). Best-effort : une erreur Redis est
+/// tracée puis ignorée — l'événement reste en base (fait persistant), seul le push
+/// live est perdu. PUBLISH est une commande ordinaire (pas une souscription).
+pub async fn publish_alert_events(redis: &ConnectionManager, events: &[InsertedEvent]) {
+    futures_util::stream::iter(events)
+        .for_each_concurrent(MAX_CONCURRENT_PUBLISH, |event| {
+            let mut redis = redis.clone();
+            async move {
+                let payload = match serde_json::to_string(&AlertMessage {
+                    kind: "alert",
+                    event,
+                }) {
+                    Ok(p) => p,
+                    Err(e) => {
+                        tracing::warn!(error = %e, "sérialisation d'une alerte échouée — non publiée");
+                        return;
+                    }
+                };
+                let channel = channel_for(event.org_id);
+                let published: redis::RedisResult<()> = redis::cmd("PUBLISH")
+                    .arg(&channel)
+                    .arg(&payload)
+                    .query_async(&mut redis)
+                    .await;
+                if let Err(e) = published {
+                    tracing::warn!(channel = %channel, error = %e,
+                        "publication d'alerte Redis échouée (événement en base, push live perdu)");
+                }
             }
-        };
-        let channel = channel_for(event.org_id);
-        let published: redis::RedisResult<()> = redis::cmd("PUBLISH")
-            .arg(&channel)
-            .arg(&payload)
-            .query_async(redis)
-            .await;
-        if let Err(e) = published {
-            tracing::warn!(channel = %channel, error = %e,
-                "publication d'alerte Redis échouée (événement en base, push live perdu)");
-        }
-    }
+        })
+        .await;
 }
 
 /// Démarre l'abonnement aux alertes (UNE souscription par instance). Le PREMIER
@@ -174,9 +226,14 @@ pub async fn publish_alert_events(redis: &mut ConnectionManager, events: &[Inser
 ///
 /// La tâche pompe les messages et RECONNECTE sur coupure, TOUJOURS avec un délai
 /// entre deux tentatives (jamais de boucle serrée, même si le flux se ferme
-/// proprement). Détachée : son arrêt gracieux est un reliquat assumé (B8b —
-/// CancellationToken partagé avec la boucle de matching).
-pub async fn start_alert_subscriber(redis_url: String, hub: AlertHub) {
+/// proprement). **Arrêt gracieux (B8b)** : le `shutdown` (partagé via `AppState`)
+/// rompt la pompe ET les attentes de réabonnement — la tâche se termine au lieu d'être
+/// tuée à la volée. Renvoie son `JoinHandle` (l'appelant peut l'attendre).
+pub async fn start_alert_subscriber(
+    redis_url: String,
+    hub: AlertHub,
+    shutdown: CancellationToken,
+) -> tokio::task::JoinHandle<()> {
     let first = match subscribe(&redis_url).await {
         Ok(pubsub) => Some(pubsub),
         Err(e) => {
@@ -189,26 +246,51 @@ pub async fn start_alert_subscriber(redis_url: String, hub: AlertHub) {
     tokio::spawn(async move {
         let mut pending = first;
         loop {
-            // Premier tour : réutilise l'abonnement déjà ouvert ; ensuite, en rouvre un.
+            if shutdown.is_cancelled() {
+                break;
+            }
+            // Premier tour : réutilise l'abonnement déjà ouvert ; ensuite, en rouvre un
+            // (en abandonnant si l'arrêt est demandé pendant l'attente).
             let pubsub = match pending.take() {
                 Some(pubsub) => pubsub,
-                None => match subscribe(&redis_url).await {
-                    Ok(pubsub) => pubsub,
-                    Err(e) => {
-                        tracing::warn!(error = %e,
-                            "réabonnement aux alertes Redis échoué — nouvelle tentative dans 2 s");
-                        tokio::time::sleep(Duration::from_secs(2)).await;
-                        continue;
-                    }
+                None => tokio::select! {
+                    _ = shutdown.cancelled() => break,
+                    res = subscribe(&redis_url) => match res {
+                        Ok(pubsub) => pubsub,
+                        Err(e) => {
+                            tracing::warn!(error = %e,
+                                "réabonnement aux alertes Redis échoué — nouvelle tentative dans 2 s");
+                            if sleep_or_cancel(&shutdown, Duration::from_secs(2)).await {
+                                break;
+                            }
+                            continue;
+                        }
+                    },
                 },
             };
-            pump_messages(pubsub, &hub).await;
-            // Flux terminé/coupé : la connexion est fermée (drop ci-dessus au retour
-            // de pump_messages) — on TEMPORISE avant de rouvrir, jamais de boucle serrée.
+            // Pompe jusqu'à fin/coupure du flux OU demande d'arrêt.
+            tokio::select! {
+                _ = shutdown.cancelled() => break,
+                _ = pump_messages(pubsub, &hub) => {}
+            }
+            // Flux terminé/coupé : la connexion est fermée (drop au retour de
+            // pump_messages) — on TEMPORISE avant de rouvrir, jamais de boucle serrée.
             tracing::warn!("flux d'alertes Redis interrompu — réabonnement dans 2 s");
-            tokio::time::sleep(Duration::from_secs(2)).await;
+            if sleep_or_cancel(&shutdown, Duration::from_secs(2)).await {
+                break;
+            }
         }
-    });
+        tracing::info!("abonné aux alertes Redis arrêté (arrêt gracieux)");
+    })
+}
+
+/// Dort `delay` OU rend la main immédiatement si l'arrêt est demandé. Renvoie `true`
+/// si l'arrêt a été demandé (l'appelant doit alors rompre sa boucle).
+async fn sleep_or_cancel(shutdown: &CancellationToken, delay: Duration) -> bool {
+    tokio::select! {
+        _ = shutdown.cancelled() => true,
+        _ = tokio::time::sleep(delay) => false,
+    }
 }
 
 /// Ouvre une connexion Redis DÉDIÉE (mode souscription — incompatible avec la
@@ -239,7 +321,7 @@ async fn pump_messages(mut pubsub: redis::aio::PubSub, hub: &AlertHub) {
 
 #[cfg(test)]
 mod tests {
-    use super::org_from_channel;
+    use super::{org_from_channel, AlertHub};
 
     #[test]
     fn parses_org_from_channel() {
@@ -247,5 +329,41 @@ mod tests {
         assert_eq!(org_from_channel("quarity:alerts:org:0"), Some(0));
         assert_eq!(org_from_channel("quarity:alerts:org:abc"), None);
         assert_eq!(org_from_channel("autre:canal"), None);
+    }
+
+    // mpsc::channel se crée hors runtime — ces tests n'ont besoin d'aucun tokio::test.
+
+    #[test]
+    fn register_enforces_per_org_cap() {
+        let hub = AlertHub::new(8, 2);
+        // On GARDE les récepteurs : laisser tomber rx ne libère PAS le slot (le tx
+        // reste dans le registre jusqu'au unregister) — exactement comme en service.
+        let _a = hub.register(1).expect("1re connexion org 1");
+        let _b = hub.register(1).expect("2e connexion org 1");
+        assert!(
+            hub.register(1).is_none(),
+            "la 3e dépasse le cap (=2) → refus"
+        );
+        // Le cap est PAR org : une autre org n'est pas affectée.
+        let _c = hub.register(2).expect("1re connexion org 2");
+        assert_eq!(hub.active_connections(), 3);
+    }
+
+    #[test]
+    fn unregister_frees_a_slot() {
+        let hub = AlertHub::new(8, 1);
+        let (id, _rx) = hub.register(7).expect("1re connexion");
+        assert!(hub.register(7).is_none(), "cap=1 atteint");
+        hub.unregister(7, id);
+        assert_eq!(hub.active_connections(), 0);
+        assert!(hub.register(7).is_some(), "slot libéré après unregister");
+    }
+
+    #[test]
+    fn cap_of_zero_is_floored_to_one() {
+        // Une mésconfig (0) ne doit pas rejeter TOUTE connexion : planché à 1.
+        let hub = AlertHub::new(8, 0);
+        assert!(hub.register(1).is_some(), "le cap 0 est ramené à 1");
+        assert!(hub.register(1).is_none(), "puis saturé");
     }
 }

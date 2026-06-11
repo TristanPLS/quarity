@@ -136,6 +136,9 @@ services:
       # forwarding EXPLICITE (lecon PR #19 : rien ne passe tout seul).
       WS_PING_INTERVAL_SECS: ${WS_PING_INTERVAL_SECS:-30}
       WS_CLIENT_BUFFER: ${WS_CLIENT_BUFFER:-64}
+      # Durcissement B8b : cap connexions/org (anti-DoS memoire authentifie) + timeout d'envoi (client lent).
+      WS_MAX_CONNECTIONS_PER_ORG: ${WS_MAX_CONNECTIONS_PER_ORG:-50}
+      WS_SEND_TIMEOUT_SECS: ${WS_SEND_TIMEOUT_SECS:-10}
     ports:
       - "${BACK_PORT:-8080}:8080"
     depends_on:

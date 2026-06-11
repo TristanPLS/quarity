@@ -38,21 +38,28 @@ async fn main() -> anyhow::Result<()> {
         .context("application des migrations Postgres (back/migrations) — démarrage refusé")?;
     tracing::info!("migrations Postgres appliquées (_sqlx_migrations à jour)");
 
+    // Jeton d'arrêt gracieux (B8b), conservé pour APRÈS l'arrêt du serveur (state est
+    // ensuite déplacé dans build_router). Partagé par la boucle de matching, l'abonné
+    // Redis et chaque session WebSocket.
+    let shutdown = state.shutdown.clone();
+
     // Boucle de matching B7 : tâche de fond périodique (mesures ingérées ×
     // règles actives → alert_events). Désactivable (MATCHING_INTERVAL_SECS=0) ;
     // un tick en échec est tracé et retenté, jamais fatal (cf. matching.rs).
     // Spawnée ICI (pas dans build_router) : les tests `spawn_app` instancient
     // des routeurs sans boucle — pas de matching parasite pendant les e2e.
-    if cfg.matching_interval_secs > 0 {
-        tokio::spawn(quarity_back::matching::run_loop(state.clone()));
+    let matching = if cfg.matching_interval_secs > 0 {
+        let handle = tokio::spawn(quarity_back::matching::run_loop(state.clone()));
         tracing::info!(
             interval_secs = cfg.matching_interval_secs,
             rules_ttl_secs = cfg.matching_rules_ttl_secs,
             "boucle de matching démarrée"
         );
+        Some(handle)
     } else {
         tracing::info!("boucle de matching désactivée (MATCHING_INTERVAL_SECS=0)");
-    }
+        None
+    };
 
     let app = routes::build_router(state);
 
@@ -65,6 +72,20 @@ async fn main() -> anyhow::Result<()> {
         .with_graceful_shutdown(shutdown_signal())
         .await
         .context("serveur HTTP")?;
+
+    // Arrêt gracieux des tâches de fond (B8b) : on signale l'annulation (l'abonné
+    // Redis et les sessions WebSocket s'arrêtent sur ce même jeton partagé), puis on
+    // laisse la boucle de matching finir son tick en cours sous un budget borné.
+    tracing::info!("arrêt du serveur — annulation des tâches de fond");
+    shutdown.cancel();
+    if let Some(handle) = matching {
+        if tokio::time::timeout(std::time::Duration::from_secs(5), handle)
+            .await
+            .is_err()
+        {
+            tracing::warn!("boucle de matching pas arrêtée sous 5 s — abandon");
+        }
+    }
 
     Ok(())
 }

@@ -24,11 +24,12 @@
 
 use std::time::Duration;
 
-use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
+use axum::extract::ws::{close_code, CloseFrame, Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Query, State};
 use axum::response::Response;
 use serde::Deserialize;
 use tokio::time::interval;
+use tokio_util::sync::CancellationToken;
 
 use crate::alerts::AlertHub;
 use crate::error::AppError;
@@ -55,24 +56,49 @@ pub async fn alerts_ws(
     let org_id = claims.org_id;
     let hub = state.alerts.clone();
     let ping_every = Duration::from_secs(state.cfg.ws_ping_interval_secs.max(1));
-    Ok(ws.on_upgrade(move |socket| handle_socket(socket, org_id, hub, ping_every)))
+    let send_timeout = Duration::from_secs(state.cfg.ws_send_timeout_secs.max(1));
+    let shutdown = state.shutdown.clone();
+    Ok(ws.on_upgrade(move |socket| {
+        handle_socket(socket, org_id, hub, ping_every, send_timeout, shutdown)
+    }))
 }
 
 /// Boucle de service d'UNE connexion : pousse les alertes de l'org, détecte la
-/// fermeture, ping périodique. Retire le client du hub en sortant (tous chemins).
-async fn handle_socket(mut socket: WebSocket, org_id: i64, hub: AlertHub, ping_every: Duration) {
-    let (conn_id, mut rx) = hub.register(org_id);
+/// fermeture, ping périodique, observe l'arrêt gracieux. Retire le client du hub en
+/// sortant (tous chemins APRÈS un enregistrement réussi).
+async fn handle_socket(
+    mut socket: WebSocket,
+    org_id: i64,
+    hub: AlertHub,
+    ping_every: Duration,
+    send_timeout: Duration,
+    shutdown: CancellationToken,
+) {
+    // Cap par org (durcissement B8b) : au-delà de la limite, on refuse PROPREMENT —
+    // 1008 (Policy Violation) + motif — sans rien enregistrer (donc pas d'unregister).
+    let (conn_id, mut rx) = match hub.register(org_id) {
+        Some(client) => client,
+        None => {
+            let _ = socket
+                .send(Message::Close(Some(CloseFrame {
+                    code: close_code::POLICY,
+                    reason: "limite de connexions WebSocket par organisation atteinte".into(),
+                })))
+                .await;
+            return;
+        }
+    };
 
     let mut ping = interval(ping_every);
     ping.tick().await; // 1er tick immédiat consommé : pas de ping dès la connexion.
 
     loop {
         tokio::select! {
-            // Message d'alerte à pousser (fan-out du hub).
+            // Message d'alerte à pousser (fan-out du hub) — sous budget d'envoi.
             maybe = rx.recv() => match maybe {
                 Some(payload) => {
-                    if socket.send(Message::Text(payload.into())).await.is_err() {
-                        break; // socket fermée côté client
+                    if send_or_break(&mut socket, Message::Text(payload.into()), send_timeout).await {
+                        break;
                     }
                 }
                 None => break, // hub fermé — ne devrait pas arriver en service
@@ -86,12 +112,40 @@ async fn handle_socket(mut socket: WebSocket, org_id: i64, hub: AlertHub, ping_e
             },
             // Keep-alive : ping périodique (traverse les proxies à timeout court).
             _ = ping.tick() => {
-                if socket.send(Message::Ping(Default::default())).await.is_err() {
+                if send_or_break(&mut socket, Message::Ping(Default::default()), send_timeout).await {
                     break;
                 }
+            }
+            // Arrêt gracieux du serveur (B8b) : on ferme proprement (1001 Going Away)
+            // au lieu de laisser la session être tuée à la volée.
+            _ = shutdown.cancelled() => {
+                let _ = tokio::time::timeout(
+                    send_timeout,
+                    socket.send(Message::Close(Some(CloseFrame {
+                        code: close_code::AWAY,
+                        reason: "arrêt du serveur".into(),
+                    }))),
+                )
+                .await;
+                break;
             }
         }
     }
 
     hub.unregister(org_id, conn_id);
+}
+
+/// Envoie un message sous un budget de temps. Renvoie `true` s'il faut ROMPRE la
+/// boucle : soit le socket est fermé (erreur d'envoi), soit le client est trop lent
+/// (fenêtre TCP saturée au-delà du timeout) — on le déconnecte plutôt que de retenir
+/// indéfiniment sa tâche (durcissement B8b).
+async fn send_or_break(socket: &mut WebSocket, msg: Message, send_timeout: Duration) -> bool {
+    match tokio::time::timeout(send_timeout, socket.send(msg)).await {
+        Ok(Ok(())) => false,
+        Ok(Err(_)) => true, // socket fermée côté client
+        Err(_) => {
+            tracing::debug!("envoi WebSocket expiré — client trop lent, déconnexion");
+            true
+        }
+    }
 }
