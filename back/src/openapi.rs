@@ -18,8 +18,8 @@ use utoipa::{Modify, OpenApi, ToSchema};
 use utoipa_swagger_ui::SwaggerUi;
 
 use crate::routes::{
-    alert_rules, aqi, auth, exposure_dose, exposure_profiles, health, measurements, organizations,
-    tracked_location_profiles, tracked_locations, users,
+    alert_rules, api_keys, aqi, auth, exposure_dose, exposure_profiles, health, measurements,
+    organizations, tracked_location_profiles, tracked_locations, users,
 };
 
 /// Nom du schéma de sécurité référencé par les annotations `security(("bearer_jwt" = []))`.
@@ -68,6 +68,9 @@ const BEARER_JWT: &str = "bearer_jwt";
         tracked_location_profiles::delete,
         exposure_dose::compute_dose,
         exposure_dose::list_results,
+        api_keys::create,
+        api_keys::list,
+        api_keys::revoke,
         users::list,
         users::create,
         users::get_one,
@@ -88,6 +91,7 @@ const BEARER_JWT: &str = "bearer_jwt";
         (name = "tracked-locations", description = "CRUD des lieux suivis (B6) — isolation multi-tenant, 404 anti-énumération"),
         (name = "alert-rules", description = "CRUD des règles de seuil (B6) — mutations auditées (T5), isolation multi-tenant"),
         (name = "exposure-profiles", description = "CRUD des profils d'exposition et seuils adaptés (B9a) — profils système partagés + custom par org, isolation multi-tenant"),
+        (name = "api-keys", description = "Clés API de l'organisation (B9b) — émission (secret affiché une fois, stocké hashé), listing, révocation ; réservé au rôle admin"),
         (name = "users", description = "CRUD des membres de l'organisation (B6) — gestion réservée au rôle admin"),
         (name = "organizations", description = "CRUD des organisations de l'appelant (B6) — rôle re-résolu par org, soft-delete"),
     )

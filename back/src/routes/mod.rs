@@ -1,6 +1,7 @@
 //! Assemblage du routeur + couches transverses.
 
 pub mod alert_rules;
+pub mod api_keys;
 pub mod aqi;
 pub mod auth;
 pub mod exposure_dose;
@@ -116,6 +117,9 @@ pub fn build_router(state: AppState) -> Router {
             "/api/tracked-location-profiles/{id}/results",
             get(exposure_dose::list_results),
         )
+        // Cles API de l'org (B9b-1) : emission/listing/revocation (admin).
+        .route("/api/api-keys", get(api_keys::list).post(api_keys::create))
+        .route("/api/api-keys/{id}", delete(api_keys::revoke))
         .route("/api/users", get(users::list).post(users::create))
         .route(
             "/api/users/{id}",
