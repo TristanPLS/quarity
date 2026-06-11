@@ -212,7 +212,7 @@ async fn custom_profile_is_invisible_cross_tenant() {
     );
 
     // Le listing d'org B ne contient pas le profil custom d'org A.
-    let (_, list) = get(&base, &token_b, "/api/exposure-profiles?page_size=1000").await;
+    let (_, list) = get(&base, &token_b, "/api/exposure-profiles?page_size=100").await;
     let found = list["data"]
         .as_array()
         .unwrap()
@@ -235,7 +235,7 @@ async fn system_profiles_are_visible_but_read_only() {
     let (st, list) = get(
         &base,
         &token,
-        "/api/exposure-profiles?scope=system&page_size=1000",
+        "/api/exposure-profiles?scope=system&page_size=100",
     )
     .await;
     assert_eq!(st, 200);
