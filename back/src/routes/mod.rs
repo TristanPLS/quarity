@@ -3,6 +3,7 @@
 pub mod alert_rules;
 pub mod aqi;
 pub mod auth;
+pub mod exposure_profiles;
 pub mod health;
 pub mod measurements;
 pub mod organizations;
@@ -12,7 +13,7 @@ pub mod ws;
 
 use axum::extract::DefaultBodyLimit;
 use axum::http::{header, HeaderValue, Method};
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post};
 use axum::Router;
 use tower_http::cors::CorsLayer;
 use tower_http::set_header::SetResponseHeaderLayer;
@@ -74,6 +75,25 @@ pub fn build_router(state: AppState) -> Router {
         )
         // Force-check B7 : réévaluation immédiate d'une règle (hot path matching).
         .route("/api/alert-rules/{id}/run", post(alert_rules::run))
+        // Profils d'exposition (B9a) + leurs seuils adaptés (sous-ressource).
+        .route(
+            "/api/exposure-profiles",
+            get(exposure_profiles::list).post(exposure_profiles::create),
+        )
+        .route(
+            "/api/exposure-profiles/{id}",
+            get(exposure_profiles::get_one)
+                .patch(exposure_profiles::update)
+                .delete(exposure_profiles::delete),
+        )
+        .route(
+            "/api/exposure-profiles/{id}/thresholds",
+            get(exposure_profiles::list_thresholds).post(exposure_profiles::create_threshold),
+        )
+        .route(
+            "/api/exposure-profiles/{id}/thresholds/{threshold_id}",
+            delete(exposure_profiles::delete_threshold),
+        )
         .route("/api/users", get(users::list).post(users::create))
         .route(
             "/api/users/{id}",
