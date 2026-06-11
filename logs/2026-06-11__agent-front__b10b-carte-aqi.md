@@ -16,6 +16,10 @@
   `#9AA0A6` si pas de donnée). **Popup** : nom + AQI + libellé de niveau + polluant dominant.
   `fitBounds` automatique (`maxZoom 13`, padding), `scrollWheelZoom` off. Lieux **sans coordonnées
   omis** de la carte (ils restent dans la grille de jauges).
+- **Marqueurs co-localisés décalés** : deux lieux partageant une station (ou au même point) — ex.
+  seed Centre-ville + École Jules-Ferry partagent la station 1001 — se posaient EXACTEMENT au même
+  endroit, l'un cachant l'autre. Ils sont maintenant **espacés en petit cercle déterministe** (~100 m)
+  pour rester tous visibles (popup inchangée). *(Détecté au smoke-test du 2026-06-11.)*
 - **Réutilise le fetch B10** : branchée dans `AqiOverviewSection` au-dessus de la grille — **aucun
   second appel réseau** (mêmes `locations` de `useAqiOverview`).
 - **CSP** : `img-src` étendue aux **tuiles OSM** (`https://*.tile.openstreetmap.org` + `data:` pour
