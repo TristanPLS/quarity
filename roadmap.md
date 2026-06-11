@@ -34,10 +34,10 @@ SQL n'est qu'une interface (Cassandra a CQL, Hive a HiveQL). La distinction wide
 
 ### Pourquoi Moka **et** Redis (pas l'un ou l'autre)
 
-- **Moka (L1, in-process)** : les règles d'alerte (`alert_rules`) activées sont compilées en mémoire et rechargées à chaque batch d'ingestion. La boucle de matching évalue chaque mesure contre les règles concernées par lookup mémoire pur, **sous 5 ms**. Pas de réseau.
+- **Moka (L1, in-process)** : les règles d'alerte (`alert_rules`) activées sont compilées en mémoire et rechargées à chaque batch d'ingestion. La boucle de matching évalue chaque mesure contre les règles concernées par lookup mémoire pur, **sous 5 ms par construction** (lookup HashMap sans réseau ; benchmark formel → C2, Jalon 4). Pas de réseau.
 - **Redis (L2, distribué)** : sessions JWT, refresh tokens, rate-limit (token bucket par IP + user, et quota par clé API), **pub/sub pour push WebSocket** (un dépassement de seuil → publication sur channel → broadcast aux clients connectés). Ce que Moka ne peut pas faire.
 
-Le hot path qui bénéficie **spécifiquement** de Moka : la boucle de matching de seuils (relue à chaque batch sur potentiellement des milliers de règles × mesures, doit rester sous 5 ms par mesure).
+Le hot path qui bénéficie **spécifiquement** de Moka : la boucle de matching de seuils (relue à chaque batch sur potentiellement des milliers de règles × mesures, doit rester sous 5 ms par mesure — *par construction ; à prouver par un bench en C2*).
 
 ---
 

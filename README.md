@@ -8,7 +8,7 @@ Quarity permet à une **collectivité**, une **autorité sanitaire**, un **étab
 
 | Couche | Choix | Pourquoi |
 |---|---|---|
-| Back | Rust + Axum | Performance + sûreté mémoire pour la boucle de matching de seuils sub-5 ms |
+| Back | Rust + Axum | Performance + sûreté mémoire pour la boucle de matching de seuils (sub-5 ms *par construction* — lookup mémoire pur ; benchmark formel → C2, Jalon 4) |
 | Front | React + Vite | DX moderne, build rapide, écosystème mature |
 | BDD OLTP | PostgreSQL 16 | Users, orgs, lieux suivis, règles d'alerte, profils d'exposition, abonnements (3NF, contraintes fortes) |
 | BDD analytics | ClickHouse 24.x | Mesures OpenAQ — stockage columnar, agrégations time-series, downsampling, rollups |
@@ -30,7 +30,7 @@ cp .env.example .env   # .env.example livré au Jalon 2
 docker compose up -d
 ```
 
-Le walking skeleton (Jalon 2) est livré :
+**Jalon 3 largement avancé** (le walking skeleton du Jalon 2 est acquis) : CRUD complet (B6, 20 endpoints), boucle de matching temps réel (B7, cache Moka L1), alertes WebSocket (B8/B8b, `/api/ws`), 1ʳᵉ feature front « vue d'ensemble AQI » (B10). Détail de l'avancement : [`docs/backlog.md`](docs/backlog.md) · plan d'ensemble : [`roadmap.md`](roadmap.md).
 
 - Front : http://localhost:3000
 - Doc API (Swagger / OpenAPI via utoipa) : http://localhost:3000/api/docs *(servie par le back, proxy nginx `/api`)*

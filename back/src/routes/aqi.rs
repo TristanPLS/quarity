@@ -21,7 +21,7 @@ use std::collections::HashMap;
 use axum::extract::State;
 use axum::Json;
 use chrono::{SecondsFormat, Utc};
-use futures_util::future::join_all;
+use futures_util::stream::StreamExt;
 use serde::Serialize;
 use utoipa::ToSchema;
 
@@ -29,6 +29,11 @@ use crate::ch::AqiSnapshotRow;
 use crate::error::AppError;
 use crate::security::AuthUser;
 use crate::state::AppState;
+
+/// Concurrence MAX des requêtes ClickHouse Q2 d'une vue d'ensemble AQI (durcissement) :
+/// un org à N lieux suivis ne déclenche PAS N requêtes ClickHouse d'un coup — au plus
+/// ce nombre en vol, le reste s'écoule au fur et à mesure (anti-amplification de coût).
+const AQI_MAX_CONCURRENT_QUERIES: usize = 16;
 
 /// AQI d'un polluant pour un lieu (meilleure — MAX — de ses stations).
 #[derive(Debug, Serialize, ToSchema)]
@@ -140,14 +145,18 @@ pub async fn overview(
         }
     }
 
-    // 2. Q2 (aqi_snapshot) par station DISTINCTE, en PARALLÈLE, à l'heure courante.
+    // 2. Q2 (aqi_snapshot) par station DISTINCTE, en parallèle BORNÉE à l'heure courante :
+    //    au plus AQI_MAX_CONCURRENT_QUERIES requêtes ClickHouse en vol (l'ordre des
+    //    résultats n'importe pas — l'agrégation §3 indexe par station).
     let now = Utc::now();
     let at = now.format("%Y-%m-%d %H:%M:%S%.3f").to_string();
-    let snapshots = join_all(stations.into_iter().map(|st| {
+    let snapshots: Vec<_> = futures_util::stream::iter(stations.into_iter().map(|st| {
         let ch = state.ch.clone();
         let at = at.clone();
         async move { (st, ch.query_aqi_snapshot(st as u64, &at).await) }
     }))
+    .buffer_unordered(AQI_MAX_CONCURRENT_QUERIES)
+    .collect()
     .await;
 
     let mut by_station: HashMap<i64, Vec<AqiSnapshotRow>> = HashMap::new();
