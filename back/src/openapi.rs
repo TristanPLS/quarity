@@ -18,7 +18,7 @@ use utoipa::{Modify, OpenApi, ToSchema};
 use utoipa_swagger_ui::SwaggerUi;
 
 use crate::routes::{
-    alert_rules, aqi, auth, exposure_profiles, health, measurements, organizations,
+    alert_rules, aqi, auth, exposure_dose, exposure_profiles, health, measurements, organizations,
     tracked_location_profiles, tracked_locations, users,
 };
 
@@ -66,6 +66,8 @@ const BEARER_JWT: &str = "bearer_jwt";
         tracked_location_profiles::get_one,
         tracked_location_profiles::update,
         tracked_location_profiles::delete,
+        exposure_dose::compute_dose,
+        exposure_dose::list_results,
         users::list,
         users::create,
         users::get_one,

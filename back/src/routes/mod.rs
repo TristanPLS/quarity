@@ -3,6 +3,7 @@
 pub mod alert_rules;
 pub mod aqi;
 pub mod auth;
+pub mod exposure_dose;
 pub mod exposure_profiles;
 pub mod health;
 pub mod measurements;
@@ -105,6 +106,15 @@ pub fn build_router(state: AppState) -> Router {
             get(tracked_location_profiles::get_one)
                 .patch(tracked_location_profiles::update)
                 .delete(tracked_location_profiles::delete),
+        )
+        // Calcul de dose (B9a-3) : sous-ressources d'une association lieu×profil.
+        .route(
+            "/api/tracked-location-profiles/{id}/compute-dose",
+            post(exposure_dose::compute_dose),
+        )
+        .route(
+            "/api/tracked-location-profiles/{id}/results",
+            get(exposure_dose::list_results),
         )
         .route("/api/users", get(users::list).post(users::create))
         .route(
