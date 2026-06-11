@@ -521,14 +521,24 @@ pub async fn run_loop(state: AppState) {
     );
     // Connexion Redis (clonée) pour publier les alertes B8 sur le canal d'org —
     // best-effort, séparé du chemin d'insertion (le fait persistant est en base).
-    let mut redis = state.redis.clone();
+    let redis = state.redis.clone();
+    // Arrêt gracieux (B8b) : partagé via AppState — annulé par `main` à l'extinction.
+    let shutdown = state.shutdown.clone();
     let mut watermark = Utc::now() - Duration::seconds(state.cfg.matching_lookback_secs as i64);
 
     let mut ticker = tokio::time::interval(StdDuration::from_secs(interval_secs));
     ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
 
     loop {
-        ticker.tick().await;
+        // Attend le prochain tick OU l'arrêt — un arrêt demandé pendant l'attente
+        // interrompt la boucle sans démarrer un tick partiel.
+        tokio::select! {
+            _ = shutdown.cancelled() => {
+                tracing::info!("boucle de matching arrêtée (arrêt gracieux)");
+                break;
+            }
+            _ = ticker.tick() => {}
+        }
 
         let index = match cache.index().await {
             Ok(i) => i,
@@ -559,7 +569,7 @@ pub async fn run_loop(state: AppState) {
                 // Push temps réel B8 : publier les events RÉELLEMENT créés (jamais
                 // au rejouage — `inserted_events` est alors vide). Best-effort.
                 if !outcome.inserted_events.is_empty() {
-                    crate::alerts::publish_alert_events(&mut redis, &outcome.inserted_events).await;
+                    crate::alerts::publish_alert_events(&redis, &outcome.inserted_events).await;
                 }
                 if outcome.inserted > 0 {
                     tracing::info!(

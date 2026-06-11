@@ -28,7 +28,7 @@ use tokio::net::TcpStream;
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 
 mod common;
-use common::{access_token, create_test_org, pg_pool, spawn_app};
+use common::{access_token, create_test_org, pg_pool, spawn_app, spawn_app_with};
 
 type Ws = WebSocketStream<MaybeTlsStream<TcpStream>>;
 
@@ -141,6 +141,26 @@ async fn connect_ws(base: &str, token: &str) -> Ws {
         .await
         .expect("handshake WebSocket");
     ws
+}
+
+/// `true` si le serveur ferme la connexion (frame Close, flux terminé ou erreur) sous
+/// le délai imparti ; `false` si rien ne vient (la connexion reste donc ouverte). Les
+/// ping/pong sont ignorés sans consommer le verdict.
+async fn is_closed_soon(ws: &mut Ws, within: Duration) -> bool {
+    let deadline = tokio::time::Instant::now() + within;
+    loop {
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remaining.is_zero() {
+            return false;
+        }
+        match tokio::time::timeout(remaining, ws.next()).await {
+            Err(_) => return false,  // échéance : pas fermé
+            Ok(None) => return true, // flux terminé
+            Ok(Some(Ok(m))) if m.is_close() => return true,
+            Ok(Some(Ok(_))) => {}            // ping/pong/texte : on reboucle
+            Ok(Some(Err(_))) => return true, // erreur de transport = fermé
+        }
+    }
 }
 
 /// Force-check d'une règle (déclenche la publication si un event est créé).
@@ -307,5 +327,85 @@ async fn ws_without_valid_token_is_rejected() {
     assert!(
         tokio_tungstenite::connect_async(bogus).await.is_err(),
         "un jeton invalide ne doit pas établir la WebSocket"
+    );
+}
+
+#[tokio::test]
+async fn connection_cap_rejects_beyond_limit() {
+    // Durcissement B8b : au-delà du cap par org, la WebSocket est refusée (Close 1008),
+    // ce qui borne le registre in-process (anti-DoS mémoire par un tenant authentifié).
+    // Cap volontairement bas (2) pour CE back de test ; rate-limits relevés (Redis +
+    // IP 127.0.0.1 partagés entre tests parallèles, cf. spawn_app).
+    let base = spawn_app_with(|c| {
+        c.rate_limit_login_email_per_min = 10_000;
+        c.rate_limit_login_ip_per_min = 10_000;
+        c.rate_limit_refresh_ip_per_min = 10_000;
+        c.ws_max_connections_per_org = 2;
+    })
+    .await;
+    let pool = pg_pool().await;
+    let org = create_test_org(&pool).await;
+    let token = access_token(&base, &org.admin_email).await;
+
+    // Deux connexions sous le cap : acceptées et MAINTENUES (on garde les handles).
+    let mut ws1 = connect_ws(&base, &token).await;
+    let mut ws2 = connect_ws(&base, &token).await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+
+    // La 3e : le handshake HTTP réussit (101), mais le serveur ferme AUSSITÔT (cap atteint).
+    let mut ws3 = connect_ws(&base, &token).await;
+    assert!(
+        is_closed_soon(&mut ws3, Duration::from_secs(2)).await,
+        "la 3e connexion d'une même org doit être fermée par le serveur (cap atteint)"
+    );
+
+    // Les deux premières restent ouvertes (le refus de la 3e ne les a pas affectées).
+    assert!(
+        !is_closed_soon(&mut ws1, Duration::from_millis(500)).await,
+        "ws1 doit rester ouverte"
+    );
+    assert!(
+        !is_closed_soon(&mut ws2, Duration::from_millis(500)).await,
+        "ws2 doit rester ouverte"
+    );
+}
+
+#[tokio::test]
+async fn connection_cap_is_per_org() {
+    // Le cap est PAR ORG (durcissement B8b) : une org saturée n'empêche pas une AUTRE
+    // org de se connecter. Cap=1 : org A prend son unique slot, sa 2e est refusée, mais
+    // org B garde son propre slot intact.
+    let base = spawn_app_with(|c| {
+        c.rate_limit_login_email_per_min = 10_000;
+        c.rate_limit_login_ip_per_min = 10_000;
+        c.rate_limit_refresh_ip_per_min = 10_000;
+        c.ws_max_connections_per_org = 1;
+    })
+    .await;
+    let pool = pg_pool().await;
+    let org_a = create_test_org(&pool).await;
+    let org_b = create_test_org(&pool).await;
+    let token_a = access_token(&base, &org_a.admin_email).await;
+    let token_b = access_token(&base, &org_b.admin_email).await;
+
+    // org A : 1re connexion acceptée (et maintenue), 2e refusée (cap=1 atteint).
+    let mut ws_a1 = connect_ws(&base, &token_a).await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    let mut ws_a2 = connect_ws(&base, &token_a).await;
+    assert!(
+        is_closed_soon(&mut ws_a2, Duration::from_secs(2)).await,
+        "la 2e connexion d'org A doit être refusée (cap=1)"
+    );
+
+    // org B : sa propre connexion passe — le cap d'org A ne la concerne pas.
+    let mut ws_b1 = connect_ws(&base, &token_b).await;
+    assert!(
+        !is_closed_soon(&mut ws_b1, Duration::from_millis(500)).await,
+        "org B doit pouvoir se connecter malgré org A au cap"
+    );
+    // org A reste connectée.
+    assert!(
+        !is_closed_soon(&mut ws_a1, Duration::from_millis(500)).await,
+        "la connexion d'org A doit rester ouverte"
     );
 }

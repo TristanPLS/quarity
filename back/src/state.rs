@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use redis::aio::ConnectionManager;
 use sqlx::PgPool;
+use tokio_util::sync::CancellationToken;
 
 use crate::alerts::AlertHub;
 use crate::ch::ClickhouseClient;
@@ -17,6 +18,11 @@ pub struct AppState {
     pub ch: ClickhouseClient,
     /// Registre des clients WebSocket d'alerte (B8), par organisation.
     pub alerts: AlertHub,
+    /// Signal d'arrêt gracieux (B8b) : annulé par `main` après l'arrêt du serveur HTTP.
+    /// Partagé par la boucle de matching, l'abonné Redis et chaque session WebSocket —
+    /// toutes s'arrêtent proprement au lieu d'être tuées à la volée. Les tests ne
+    /// l'annulent jamais (le runtime du test abandonne les tâches en fin de test).
+    pub shutdown: CancellationToken,
 }
 
 impl AppState {
@@ -39,10 +45,18 @@ impl AppState {
         // client WebSocket reçoit les events publiés sur SON instance. L'abonné est
         // en LECTURE seule sur Redis (aucune écriture base), inoffensif en e2e —
         // contrairement à la boucle de matching, qui ne tourne que dans `main.rs`.
-        let alerts = AlertHub::new(cfg.ws_client_buffer);
+        let alerts = AlertHub::new(cfg.ws_client_buffer, cfg.ws_max_connections_per_org);
+        let shutdown = CancellationToken::new();
         // `.await` : le PREMIER PSUBSCRIBE est synchrone — `connect` ne rend la main
         // qu'une fois l'abonné prêt (Redis up), donc aucun « publié avant abonnement ».
-        crate::alerts::start_alert_subscriber(cfg.redis_url.clone(), alerts.clone()).await;
+        // On DÉTACHE la tâche (JoinHandle ignoré) : l'abonné (lecture seule sur Redis)
+        // s'arrête sur annulation du `shutdown` partagé — pas besoin de l'attendre.
+        crate::alerts::start_alert_subscriber(
+            cfg.redis_url.clone(),
+            alerts.clone(),
+            shutdown.clone(),
+        )
+        .await;
 
         Ok(Self {
             cfg,
@@ -50,6 +64,7 @@ impl AppState {
             redis,
             ch,
             alerts,
+            shutdown,
         })
     }
 }

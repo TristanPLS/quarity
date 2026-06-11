@@ -39,6 +39,14 @@ pub struct Config {
     /// Profondeur de file par client WebSocket (`WS_CLIENT_BUFFER`, déf. 64) — un
     /// client lent voit ses messages les plus anciens déposés (backpressure bornée).
     pub ws_client_buffer: usize,
+    /// Connexions WebSocket simultanées MAX par organisation (`WS_MAX_CONNECTIONS_PER_ORG`,
+    /// déf. 50 ; planché à 1) — borne le registre in-process : un tenant authentifié ne
+    /// peut pas épuiser la mémoire du back en ouvrant des connexions sans fin (durcissement B8b).
+    pub ws_max_connections_per_org: usize,
+    /// Délai MAX d'un envoi sur le socket WebSocket (`WS_SEND_TIMEOUT_SECS`, déf. 10 ;
+    /// planché à 1) — un client dont la fenêtre TCP est saturée (lecture bloquée) est
+    /// déconnecté plutôt que de retenir indéfiniment sa tâche de service (durcissement B8b).
+    pub ws_send_timeout_secs: u64,
 }
 
 impl Config {
@@ -92,6 +100,9 @@ impl Config {
                 as u32,
             ws_ping_interval_secs: env_u64("WS_PING_INTERVAL_SECS", 30),
             ws_client_buffer: env_u64("WS_CLIENT_BUFFER", 64) as usize,
+            // Planché à 1 : une valeur 0 (mésconfig) ne doit PAS rejeter toute connexion.
+            ws_max_connections_per_org: env_u64("WS_MAX_CONNECTIONS_PER_ORG", 50).max(1) as usize,
+            ws_send_timeout_secs: env_u64("WS_SEND_TIMEOUT_SECS", 10).max(1),
         }))
     }
 }
