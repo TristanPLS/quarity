@@ -19,7 +19,7 @@ use utoipa_swagger_ui::SwaggerUi;
 
 use crate::routes::{
     alert_rules, aqi, auth, exposure_profiles, health, measurements, organizations,
-    tracked_locations, users,
+    tracked_location_profiles, tracked_locations, users,
 };
 
 /// Nom du schéma de sécurité référencé par les annotations `security(("bearer_jwt" = []))`.
@@ -61,6 +61,11 @@ const BEARER_JWT: &str = "bearer_jwt";
         exposure_profiles::list_thresholds,
         exposure_profiles::create_threshold,
         exposure_profiles::delete_threshold,
+        tracked_location_profiles::list,
+        tracked_location_profiles::create,
+        tracked_location_profiles::get_one,
+        tracked_location_profiles::update,
+        tracked_location_profiles::delete,
         users::list,
         users::create,
         users::get_one,

@@ -7,6 +7,7 @@ pub mod exposure_profiles;
 pub mod health;
 pub mod measurements;
 pub mod organizations;
+pub mod tracked_location_profiles;
 pub mod tracked_locations;
 pub mod users;
 pub mod ws;
@@ -93,6 +94,17 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/api/exposure-profiles/{id}/thresholds/{threshold_id}",
             delete(exposure_profiles::delete_threshold),
+        )
+        // Association lieu suivi × profil d'exposition + plage horaire (B9a-2).
+        .route(
+            "/api/tracked-location-profiles",
+            get(tracked_location_profiles::list).post(tracked_location_profiles::create),
+        )
+        .route(
+            "/api/tracked-location-profiles/{id}",
+            get(tracked_location_profiles::get_one)
+                .patch(tracked_location_profiles::update)
+                .delete(tracked_location_profiles::delete),
         )
         .route("/api/users", get(users::list).post(users::create))
         .route(
