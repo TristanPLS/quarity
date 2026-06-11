@@ -17,6 +17,11 @@ RUN apt-get update \
 WORKDIR /app
 COPY --from=builder /app/target/release/quarity-back /usr/local/bin/quarity-back
 COPY --from=builder /app/target/release/ingest /usr/local/bin/quarity-ingest
+# Durcissement : conteneur NON-ROOT. uid dédié sans privilège — le binaire écoute sur
+# 8080 (port non privilégié), ne sert que des migrations EMBARQUÉES (compile-time) et
+# n'écrit sur aucun volume ; idem pour quarity-ingest. curl (healthcheck) reste dispo.
+RUN useradd --system --no-create-home --uid 10001 quarity
+USER quarity
 EXPOSE 8080
 ENV BIND_ADDR=0.0.0.0:8080
 CMD ["quarity-back"]
