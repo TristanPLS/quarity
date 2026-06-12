@@ -74,7 +74,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
 })
 
 /* ===== Badge (UI générique — jamais un niveau d'air) ===== */
-type BadgeTone = 'neutral' | 'info' | 'success' | 'danger'
+type BadgeTone = 'neutral' | 'info' | 'success' | 'warning' | 'danger'
 export function Badge({ tone = 'neutral', dot, children }: { tone?: BadgeTone; dot?: boolean; children: ReactNode }) {
   return (
     <span className={`${styles.badge} ${styles[tone]}`}>

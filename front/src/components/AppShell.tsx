@@ -6,6 +6,7 @@ import styles from './AppShell.module.css'
 const NAV = [
   { to: '/dashboard', label: 'Tableau de bord' },
   { to: '/locations', label: 'Lieux suivis' },
+  { to: '/rules', label: "Règles d'alerte" },
 ]
 
 /**

@@ -64,6 +64,8 @@
 .neutral { background: var(--c-bg-sunken); color: var(--c-text-muted); border-color: var(--c-border); }
 .info { background: var(--brand-sky); color: var(--brand-atmosphere); }
 .success { background: var(--c-success-bg); color: var(--c-success); }
+.warning { background: var(--c-warning-bg); color: var(--c-warning); }
+.danger { background: var(--c-danger-bg); color: var(--c-danger); }
 
 /* ===== AqiBadge (couleurs EXCLUSIVEMENT --aqi-*) ===== */
 .aqi { display: inline-flex; align-items: baseline; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3); border-radius: var(--radius-sm); font-weight: var(--fw-medium); border: 1px solid rgba(0,0,0,0.12); }
