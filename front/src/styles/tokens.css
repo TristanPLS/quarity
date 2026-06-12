@@ -37,6 +37,8 @@
 
   --c-success:       #2F9E70;
   --c-success-bg:    var(--brand-mint-soft);
+  --c-warning:       #9A5B00;
+  --c-warning-bg:    #FCEFD6;
   --c-danger:        var(--brand-danger);
   --c-danger-bg:     var(--brand-danger-soft);
 
