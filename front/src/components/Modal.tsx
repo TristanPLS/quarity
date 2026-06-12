@@ -24,7 +24,11 @@ export function Modal({ open, title, onClose, children, footer }: ModalProps) {
   useEffect(() => {
     const dlg = ref.current
     if (!dlg) return
-    if (open && !dlg.open) dlg.showModal()
+    if (open && !dlg.open) {
+      dlg.showModal()
+      // `showModal()` place sinon le focus sur le bouton fermer : on vise le 1er champ.
+      dlg.querySelector<HTMLElement>('input, select, textarea')?.focus()
+    }
     if (!open && dlg.open) dlg.close()
   }, [open])
 
