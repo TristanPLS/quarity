@@ -1,21 +1,4 @@
-.app { min-height: 100vh; background: var(--c-bg); }
-
-.topbar {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: var(--sp-3) var(--sp-5);
-  background: var(--brand-atmosphere); color: var(--brand-mist);
-}
-.brand { display: flex; align-items: center; gap: var(--sp-3); }
-.logoRing {
-  width: 26px; height: 26px; border-radius: 50%;
-  border: 3px solid var(--brand-cyan); display: inline-block;
-}
-.brandName { font-weight: var(--fw-bold); font-size: var(--fs-lg); }
-.userBox { display: flex; align-items: center; gap: var(--sp-4); }
-.user { font-size: var(--fs-sm); color: var(--brand-sky); }
-.role { color: var(--brand-mist); font-weight: var(--fw-medium); }
-.userBox .ghost { color: var(--brand-mist); }
-
+/* La barre supérieure (marque + navigation + session) vit désormais dans AppShell. */
 .main { max-width: 1080px; margin: 0 auto; padding: var(--sp-6) var(--sp-5); }
 .head { margin-bottom: var(--sp-4); }
 .title { color: var(--brand-atmosphere); }

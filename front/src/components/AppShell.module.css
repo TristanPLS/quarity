@@ -1,0 +1,41 @@
+.app { min-height: 100vh; background: var(--c-bg); }
+
+.topbar {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4);
+  padding: var(--sp-3) var(--sp-5);
+  background: var(--brand-atmosphere); color: var(--brand-mist);
+}
+.left { display: flex; align-items: center; gap: var(--sp-6); }
+.brand { display: flex; align-items: center; gap: var(--sp-3); }
+.logoRing {
+  width: 26px; height: 26px; border-radius: 50%;
+  border: 3px solid var(--brand-cyan); display: inline-block;
+}
+.brandName { font-weight: var(--fw-bold); font-size: var(--fs-lg); }
+
+.nav { display: flex; align-items: center; gap: var(--sp-2); }
+.navLink {
+  padding: var(--sp-2) var(--sp-3); border-radius: var(--radius-md);
+  font-size: var(--fs-sm); font-weight: var(--fw-medium);
+  color: var(--brand-sky); text-decoration: none;
+  transition: background var(--transition), color var(--transition);
+}
+.navLink:hover { background: var(--brand-atmosphere-2); color: var(--brand-mist); }
+.navActive { background: var(--brand-atmosphere-2); color: var(--brand-mist); }
+
+.userBox { display: flex; align-items: center; gap: var(--sp-4); }
+.user { font-size: var(--fs-sm); color: var(--brand-sky); }
+.role { color: var(--brand-mist); font-weight: var(--fw-medium); }
+
+/* Bouton de déconnexion sur fond sombre : sélecteur à 2 classes (0,2,0) pour
+   l'emporter sur le `.ghost` (0,1,0) de ui.module.css, quel que soit l'ordre d'import. */
+.topbar .logout { color: var(--brand-mist); border-color: rgba(244, 248, 250, 0.35); }
+.topbar .logout:hover:not(:disabled) { background: var(--brand-atmosphere-2); }
+
+/* Responsive < 768px (B11c affinera l'ensemble des écrans). */
+@media (max-width: 768px) {
+  .topbar { flex-direction: column; align-items: stretch; gap: var(--sp-3); }
+  .left { flex-direction: column; align-items: flex-start; gap: var(--sp-3); }
+  .nav { flex-wrap: wrap; }
+  .userBox { justify-content: space-between; }
+}

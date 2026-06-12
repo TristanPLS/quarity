@@ -10,7 +10,6 @@ import {
   YAxis,
   type TooltipProps,
 } from 'recharts'
-import { useAuth } from '../auth/AuthContext'
 import { ApiError, PARAMETERS, type Parameter } from '../api/types'
 import { formatFull, formatTick } from '../lib/datetime'
 import { useMeasurements, type ChartPoint, type MeasurementQuery } from '../features/measurements/useMeasurements'
@@ -47,7 +46,6 @@ function CustomTooltip({ active, payload }: TooltipProps<number, string>) {
 
 export function DashboardPage() {
   const navigate = useNavigate()
-  const { user, logout } = useAuth()
   const { status, points, unit, count, error, fetchMeasurements } = useMeasurements()
 
   // Plage par défaut alignée sur les données de démo (seed mai 2026).
@@ -84,25 +82,7 @@ export function DashboardPage() {
   const isEmpty = status === 'success' && points.length === 0
 
   return (
-    <div className={styles.app}>
-      <header className={styles.topbar}>
-        <div className={styles.brand}>
-          <span className={styles.logoRing} aria-hidden="true" />
-          <span className={styles.brandName}>Quarity</span>
-        </div>
-        <div className={styles.userBox}>
-          {user && (
-            <span className={styles.user}>
-              {user.email} <span className={styles.role}>· {user.role}</span>
-            </span>
-          )}
-          <Button variant="ghost" onClick={() => void logout()}>
-            Déconnexion
-          </Button>
-        </div>
-      </header>
-
-      <main className={styles.main}>
+    <main className={styles.main}>
         <AlertsPanel />
 
         <AqiOverviewSection />
@@ -247,8 +227,7 @@ export function DashboardPage() {
             </div>
           </>
         )}
-      </main>
-    </div>
+    </main>
   )
 }
 
