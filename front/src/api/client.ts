@@ -4,11 +4,14 @@ import {
   type AlertRuleFilters,
   type AqiOverview,
   type CreateAlertRuleInput,
+  type ComputeDoseQuery,
   type CreateExposureProfileInput,
   type CreateThresholdInput,
+  type CreateTlpInput,
   type CreateTrackedLocationInput,
   type ExposureProfile,
   type ExposureProfileFilters,
+  type ExposureResult,
   type ExposureThreshold,
   type ListQuery,
   type Me,
@@ -18,11 +21,14 @@ import {
   type RunOutcome,
   type RunQuery,
   type TokenResponse,
+  type TlpFilters,
   type TrackedLocation,
   type TrackedLocationDetail,
   type TrackedLocationFilters,
+  type TrackedLocationProfile,
   type UpdateAlertRuleInput,
   type UpdateExposureProfileInput,
+  type UpdateTlpInput,
   type UpdateTrackedLocationInput,
 } from './types'
 import { tokenStore } from './tokenStore'
@@ -192,5 +198,24 @@ export const api = {
       request<ExposureThreshold>(`/api/exposure-profiles/${id}/thresholds`, { method: 'POST', body: input }),
     removeThreshold: (id: number, thresholdId: number) =>
       request<void>(`/api/exposure-profiles/${id}/thresholds/${thresholdId}`, { method: 'DELETE' }),
+  },
+
+  // --- Associations lieu × profil + dose (B9a, consommé en B11c) ---
+  trackedLocationProfiles: {
+    list: (params: ListQuery & TlpFilters = {}) =>
+      request<Page<TrackedLocationProfile>>(`/api/tracked-location-profiles${buildQuery(params)}`, { method: 'GET' }),
+    get: (id: number) =>
+      request<TrackedLocationProfile>(`/api/tracked-location-profiles/${id}`, { method: 'GET' }),
+    create: (input: CreateTlpInput) =>
+      request<TrackedLocationProfile>('/api/tracked-location-profiles', { method: 'POST', body: input }),
+    update: (id: number, input: UpdateTlpInput) =>
+      request<TrackedLocationProfile>(`/api/tracked-location-profiles/${id}`, { method: 'PATCH', body: input }),
+    remove: (id: number) => request<void>(`/api/tracked-location-profiles/${id}`, { method: 'DELETE' }),
+    /** Calcule la dose sur la période (snapshot) → résultats par seuil. */
+    computeDose: (id: number, q: ComputeDoseQuery) =>
+      request<ExposureResult[]>(`/api/tracked-location-profiles/${id}/compute-dose${buildQuery(q)}`, { method: 'POST' }),
+    /** Cache complet des résultats de dose (non paginé). */
+    results: (id: number) =>
+      request<ExposureResult[]>(`/api/tracked-location-profiles/${id}/results`, { method: 'GET' }),
   },
 }
