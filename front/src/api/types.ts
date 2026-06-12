@@ -341,6 +341,110 @@ export interface CreateThresholdInput {
   averaging_period?: AveragingPeriod
 }
 
+// --- Association lieu × profil + dose (CRUD — B9a, consommé en B11c) ---
+/** Jours de la semaine du bitmask `days_mask` (bit0=Lundi … bit6=Dimanche). */
+export const WEEKDAYS: ReadonlyArray<{ bit: number; short: string; label: string }> = [
+  { bit: 0, short: 'Lun', label: 'Lundi' },
+  { bit: 1, short: 'Mar', label: 'Mardi' },
+  { bit: 2, short: 'Mer', label: 'Mercredi' },
+  { bit: 3, short: 'Jeu', label: 'Jeudi' },
+  { bit: 4, short: 'Ven', label: 'Vendredi' },
+  { bit: 5, short: 'Sam', label: 'Samedi' },
+  { bit: 6, short: 'Dim', label: 'Dimanche' },
+]
+
+/** Décode un `days_mask` (1..127) en libellé court pour l'affichage. */
+export function daysMaskLabel(mask: number): string {
+  if (mask === 127) return 'Tous les jours' // 0b1111111
+  if (mask === 31) return 'Lun→Ven' // 0b0011111 (bits 0..4)
+  if (mask === 96) return 'Week-end' // 0b1100000 (bits 5..6)
+  const days = WEEKDAYS.filter((d) => (mask & (1 << d.bit)) !== 0).map((d) => d.short)
+  return days.length ? days.join(', ') : '—'
+}
+
+/** Fuseaux IANA proposés (l'app est FR-centrée ; défaut back = `Europe/Paris`). */
+export const COMMON_TIMEZONES = [
+  'Europe/Paris',
+  'Europe/London',
+  'Europe/Brussels',
+  'Europe/Madrid',
+  'Europe/Berlin',
+  'UTC',
+] as const
+
+export interface TrackedLocationProfile {
+  id: number
+  tracked_location_id: number
+  tracked_location_name: string
+  exposure_profile_id: number
+  exposure_profile_code: string
+  exposure_profile_name: string
+  /** `HH:MM:SS` (heure locale du fuseau). */
+  start_time: string
+  end_time: string
+  /** Bitmask 1..127 (bit0=Lundi … bit6=Dimanche). */
+  days_mask: number
+  timezone: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface TlpFilters {
+  tracked_location_id?: number
+  exposure_profile_id?: number
+  is_active?: boolean
+}
+
+export interface CreateTlpInput {
+  /** Lieu de l'org (404 sinon) — IMMUABLE après création. */
+  tracked_location_id: number
+  /** Profil visible : système ou org (404 sinon) — IMMUABLE après création. */
+  exposure_profile_id: number
+  /** `HH:MM` ou `HH:MM:SS` ; `end_time` doit être strictement > `start_time` (422). */
+  start_time: string
+  end_time: string
+  /** Bitmask 1..127. */
+  days_mask: number
+  /** Défaut back : `Europe/Paris`. */
+  timezone?: string
+  /** Défaut back : `true`. */
+  is_active?: boolean
+}
+
+/** PATCH partiel — lieu et profil IMMUABLES (absents). */
+export interface UpdateTlpInput {
+  start_time?: string
+  end_time?: string
+  days_mask?: number
+  timezone?: string
+  is_active?: boolean
+}
+
+/** Fenêtre du calcul de dose (`POST {id}/compute-dose`) — dates locales incluses. */
+export interface ComputeDoseQuery {
+  /** `YYYY-MM-DD`. */
+  period_start: string
+  period_end: string
+}
+
+/** Résultat de dose : heures de dépassement du seuil sur la période/fenêtre (snapshot). */
+export interface ExposureResult {
+  id: number
+  tracked_location_profile_id: number
+  parameter: string
+  threshold_value: number
+  period_start: string
+  period_end: string
+  window_start_time: string
+  window_end_time: string
+  days_mask: number
+  timezone: string
+  hours_over_threshold: number
+  sample_count: number
+  computed_at: string
+}
+
 // --- Erreur API normalisée ---
 export class ApiError extends Error {
   constructor(

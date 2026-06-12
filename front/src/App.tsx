@@ -6,6 +6,7 @@ import { DashboardPage } from './pages/DashboardPage'
 import { LocationsPage } from './pages/LocationsPage'
 import { RulesPage } from './pages/RulesPage'
 import { ProfilesPage } from './pages/ProfilesPage'
+import { ExposuresPage } from './pages/ExposuresPage'
 
 export default function App() {
   return (
@@ -18,6 +19,7 @@ export default function App() {
           <Route path="/locations" element={<LocationsPage />} />
           <Route path="/rules" element={<RulesPage />} />
           <Route path="/profiles" element={<ProfilesPage />} />
+          <Route path="/exposures" element={<ExposuresPage />} />
         </Route>
       </Route>
 

@@ -8,6 +8,7 @@ const NAV = [
   { to: '/locations', label: 'Lieux suivis' },
   { to: '/rules', label: "Règles d'alerte" },
   { to: '/profiles', label: "Profils d'exposition" },
+  { to: '/exposures', label: 'Expositions' },
 ]
 
 /**
