@@ -61,4 +61,6 @@
 @media (max-width: 768px) {
   .head { flex-direction: column; }
   .actions { justify-content: flex-start; }
+  .table th, .table td { padding: var(--sp-2) var(--sp-3); }
+  .desc { max-width: 28ch; }
 }

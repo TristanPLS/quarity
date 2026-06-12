@@ -83,4 +83,5 @@
   .head { flex-direction: column; }
   .actions { justify-content: flex-start; }
   .row { flex-direction: column; }
+  .table th, .table td { padding: var(--sp-2) var(--sp-3); }
 }
