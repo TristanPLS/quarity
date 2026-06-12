@@ -110,6 +110,166 @@ export interface AlertMessage {
   event: AlertEvent
 }
 
+// --- Listing CRUD (pagination/tri/filtre — B6, consommé en B11b) ---
+/** Page renvoyée par les listings CRUD : `{ page, page_size, count, total, data }`. */
+export interface Page<T> {
+  page: number
+  page_size: number
+  /** Taille de `data` (cette page). */
+  count: number
+  /** Total filtré, toutes pages confondues. */
+  total: number
+  data: T[]
+}
+
+/**
+ * Paramètres communs des listings CRUD (B6).
+ * `sort` : attribut d'allowlist, préfixe `-` = descendant (ex. `-created_at`).
+ */
+export interface ListQuery {
+  q?: string
+  sort?: string
+  page?: number
+  page_size?: number
+}
+
+// --- Lieux suivis (CRUD — B6, consommé en B11b) ---
+export interface TrackedLocation {
+  id: number
+  org_id: number
+  name: string
+  description: string | null
+  /** `false` = surveillance en pause (le lieu reste listé, ses règles dormantes). */
+  is_active: boolean
+  /** Nombre de stations OpenAQ liées (≥ 1 par construction). */
+  station_count: number
+  /** Nombre de règles d'alerte ACTIVES adossées au lieu. */
+  active_rule_count: number
+  created_at: string
+  updated_at: string
+}
+
+/** Station OpenAQ liée à un lieu suivi (détail uniquement). */
+export interface TrackedStation {
+  openaq_location_id: number
+  name: string
+  city: string | null
+  /** ISO-3166-1 alpha-2. */
+  country: string
+  /** Station de référence du lieu (au plus une). */
+  is_primary: boolean
+}
+
+/** Détail d'un lieu : le DTO (aplati côté back) + ses stations triées (primaire d'abord). */
+export type TrackedLocationDetail = TrackedLocation & {
+  stations: TrackedStation[]
+}
+
+export interface TrackedLocationFilters {
+  is_active?: boolean
+}
+
+export interface CreateTrackedLocationInput {
+  name: string
+  description?: string
+  /** Clés naturelles OpenAQ, 1 à 50 — la PREMIÈRE devient station primaire. */
+  openaq_location_ids: number[]
+  /** Règles créées atomiquement avec le lieu (50 max). */
+  rules?: InlineRuleInput[]
+}
+
+/** Règle d'alerte créée en même temps que le lieu (`POST /tracked-locations`). */
+export interface InlineRuleInput {
+  parameter: Parameter
+  comparator: Comparator
+  threshold_value: number
+  severity?: Severity
+  name?: string
+}
+
+/** PATCH partiel : champs absents = inchangés ; `description: ''` efface la description. */
+export interface UpdateTrackedLocationInput {
+  name?: string
+  description?: string
+  is_active?: boolean
+}
+
+// --- Règles d'alerte (CRUD — B6, consommé en B11b) ---
+export const COMPARATORS = ['>', '>='] as const
+export type Comparator = (typeof COMPARATORS)[number]
+
+export const SEVERITIES = ['info', 'warning', 'critical'] as const
+export type Severity = (typeof SEVERITIES)[number]
+
+export const RULE_STATUSES = ['active', 'inactive'] as const
+export type RuleStatus = (typeof RULE_STATUSES)[number]
+
+/** Libellés d'affichage des sévérités. */
+export const SEVERITY_LABELS: Record<Severity, string> = {
+  info: 'Info',
+  warning: 'Avertissement',
+  critical: 'Critique',
+}
+
+export interface AlertRule {
+  id: number
+  org_id: number
+  /** Lieu porteur (IMMUABLE après création). */
+  tracked_location_id: number
+  tracked_location_name: string
+  /** Polluant surveillé (IMMUABLE après création). */
+  parameter: string
+  comparator: string
+  threshold_value: number
+  severity: string
+  /** `active` / `inactive` — seules les règles actives déclenchent des alertes. */
+  status: string
+  name: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface AlertRuleFilters {
+  tracked_location_id?: number
+  status?: RuleStatus
+  severity?: Severity
+  parameter?: Parameter
+}
+
+export interface CreateAlertRuleInput {
+  /** Lieu porteur — doit appartenir à l'org du JWT (404 sinon). */
+  tracked_location_id: number
+  parameter: Parameter
+  comparator: Comparator
+  threshold_value: number
+  /** Défaut back : `warning`. */
+  severity?: Severity
+  name?: string
+}
+
+/** PATCH partiel — `tracked_location_id` et `parameter` sont IMMUABLES (absents). */
+export interface UpdateAlertRuleInput {
+  comparator?: Comparator
+  threshold_value?: number
+  severity?: Severity
+  status?: RuleStatus
+  /** `''` efface le libellé. */
+  name?: string
+}
+
+/** Fenêtre du force-check (`POST /alert-rules/{id}/run`) — heures, 1..=168, défaut 24. */
+export interface RunQuery {
+  lookback_hours?: number
+}
+
+/** Bilan d'un force-check (B7). Un re-run renvoie `events_created: 0` (idempotence). */
+export interface RunOutcome {
+  rule_id: number
+  evaluated: number
+  breaches: number
+  events_created: number
+}
+
 // --- Erreur API normalisée ---
 export class ApiError extends Error {
   constructor(
@@ -119,5 +279,55 @@ export class ApiError extends Error {
   ) {
     super(message ?? `Erreur API ${status}`)
     this.name = 'ApiError'
+  }
+}
+
+/** Corps d'erreur normalisé du back : `{ error: <code stable>, message: <humain> }`. */
+export interface ApiErrorBody {
+  error: string
+  message: string
+}
+
+export function isApiError(e: unknown): e is ApiError {
+  return e instanceof ApiError
+}
+
+function apiErrorBody(e: ApiError): ApiErrorBody | null {
+  const b = e.body
+  if (b && typeof b === 'object' && 'error' in b && 'message' in b) return b as ApiErrorBody
+  return null
+}
+
+/** Code d'erreur stable du back (`conflict`, `read_only_role`, `unprocessable_entity`, …) ou `null`. */
+export function apiErrorCode(e: unknown): string | null {
+  return isApiError(e) ? (apiErrorBody(e)?.error ?? null) : null
+}
+
+/**
+ * Message lisible pour l'UX. Pour 401/403/404 le back renvoie un code technique
+ * comme message → on substitue un libellé FR ; pour 400/409/422/429 on privilégie
+ * le message FR déjà fourni par le back (validateurs, conflits). Réseau → générique.
+ */
+export function apiErrorMessage(e: unknown): string {
+  if (!isApiError(e)) return 'Erreur réseau. Vérifiez votre connexion.'
+  switch (e.status) {
+    case 401:
+      return 'Session expirée. Reconnectez-vous.'
+    case 403:
+      return 'Action non autorisée : votre compte est en lecture seule.'
+    case 404:
+      return 'Ressource introuvable.'
+  }
+  const message = apiErrorBody(e)?.message
+  if (message) return message
+  switch (e.status) {
+    case 409:
+      return 'Conflit : cette ressource existe déjà.'
+    case 422:
+      return 'Données invalides.'
+    case 429:
+      return 'Trop de requêtes. Réessayez dans un instant.'
+    default:
+      return e.status >= 500 ? 'Erreur serveur. Réessayez plus tard.' : 'Requête invalide.'
   }
 }
