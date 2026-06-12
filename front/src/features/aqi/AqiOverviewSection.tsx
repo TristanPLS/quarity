@@ -56,7 +56,7 @@ export function AqiOverviewSection() {
 
       {status === 'success' && locations.length === 0 && (
         <div className={styles.stateBox}>
-          Aucun lieu suivi actif. La gestion des lieux et des règles arrive au prochain jalon front (B11).
+          Aucun lieu suivi actif. Ajoutez vos lieux depuis l'onglet « Lieux suivis ».
         </div>
       )}
 
