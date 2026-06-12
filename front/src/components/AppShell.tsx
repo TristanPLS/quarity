@@ -7,6 +7,7 @@ const NAV = [
   { to: '/dashboard', label: 'Tableau de bord' },
   { to: '/locations', label: 'Lieux suivis' },
   { to: '/rules', label: "Règles d'alerte" },
+  { to: '/profiles', label: "Profils d'exposition" },
 ]
 
 /**

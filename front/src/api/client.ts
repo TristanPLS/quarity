@@ -4,7 +4,12 @@ import {
   type AlertRuleFilters,
   type AqiOverview,
   type CreateAlertRuleInput,
+  type CreateExposureProfileInput,
+  type CreateThresholdInput,
   type CreateTrackedLocationInput,
+  type ExposureProfile,
+  type ExposureProfileFilters,
+  type ExposureThreshold,
   type ListQuery,
   type Me,
   type MeasurementsQuery,
@@ -17,6 +22,7 @@ import {
   type TrackedLocationDetail,
   type TrackedLocationFilters,
   type UpdateAlertRuleInput,
+  type UpdateExposureProfileInput,
   type UpdateTrackedLocationInput,
 } from './types'
 import { tokenStore } from './tokenStore'
@@ -167,5 +173,24 @@ export const api = {
     /** Force-check immédiat (B7) : réévalue la règle maintenant, hors boucle périodique. */
     run: (id: number, q: RunQuery = {}) =>
       request<RunOutcome>(`/api/alert-rules/${id}/run${buildQuery(q)}`, { method: 'POST' }),
+  },
+
+  // --- Profils d'exposition : CRUD + seuils (B9a, consommé en B11c) ---
+  exposureProfiles: {
+    list: (params: ListQuery & ExposureProfileFilters = {}) =>
+      request<Page<ExposureProfile>>(`/api/exposure-profiles${buildQuery(params)}`, { method: 'GET' }),
+    get: (id: number) => request<ExposureProfile>(`/api/exposure-profiles/${id}`, { method: 'GET' }),
+    create: (input: CreateExposureProfileInput) =>
+      request<ExposureProfile>('/api/exposure-profiles', { method: 'POST', body: input }),
+    update: (id: number, input: UpdateExposureProfileInput) =>
+      request<ExposureProfile>(`/api/exposure-profiles/${id}`, { method: 'PATCH', body: input }),
+    remove: (id: number) => request<void>(`/api/exposure-profiles/${id}`, { method: 'DELETE' }),
+    /** Seuils du profil (sous-ressource, non paginée). */
+    listThresholds: (id: number) =>
+      request<ExposureThreshold[]>(`/api/exposure-profiles/${id}/thresholds`, { method: 'GET' }),
+    addThreshold: (id: number, input: CreateThresholdInput) =>
+      request<ExposureThreshold>(`/api/exposure-profiles/${id}/thresholds`, { method: 'POST', body: input }),
+    removeThreshold: (id: number, thresholdId: number) =>
+      request<void>(`/api/exposure-profiles/${id}/thresholds/${thresholdId}`, { method: 'DELETE' }),
   },
 }
