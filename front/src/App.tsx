@@ -5,6 +5,7 @@ import { LoginPage } from './pages/LoginPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { LocationsPage } from './pages/LocationsPage'
 import { RulesPage } from './pages/RulesPage'
+import { ProfilesPage } from './pages/ProfilesPage'
 
 export default function App() {
   return (
@@ -16,6 +17,7 @@ export default function App() {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/locations" element={<LocationsPage />} />
           <Route path="/rules" element={<RulesPage />} />
+          <Route path="/profiles" element={<ProfilesPage />} />
         </Route>
       </Route>
 

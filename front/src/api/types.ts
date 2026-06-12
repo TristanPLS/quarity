@@ -270,6 +270,77 @@ export interface RunOutcome {
   events_created: number
 }
 
+// --- Profils d'exposition (CRUD — B9a, consommé en B11c) ---
+export const EXPOSURE_CODES = ['enfants', 'asthmatiques', 'personnes_agees', 'sportifs', 'general'] as const
+export type ExposureCode = (typeof EXPOSURE_CODES)[number]
+
+export const EXPOSURE_CODE_LABELS: Record<ExposureCode, string> = {
+  enfants: 'Enfants',
+  asthmatiques: 'Asthmatiques',
+  personnes_agees: 'Personnes âgées',
+  sportifs: 'Sportifs',
+  general: 'Population générale',
+}
+export const exposureCodeLabel = (c: string): string => EXPOSURE_CODE_LABELS[c as ExposureCode] ?? c
+
+export const AVERAGING_PERIODS = ['1h', '8h', '24h', 'annual'] as const
+export type AveragingPeriod = (typeof AVERAGING_PERIODS)[number]
+
+export const AVERAGING_PERIOD_LABELS: Record<AveragingPeriod, string> = {
+  '1h': '1 h',
+  '8h': '8 h',
+  '24h': '24 h',
+  annual: 'Annuel',
+}
+
+export interface ExposureProfile {
+  id: number
+  /** `null` = profil système partagé (lecture seule pour toutes les orgs). */
+  org_id: number | null
+  code: string
+  name: string
+  description: string | null
+  is_system: boolean
+  created_at: string
+  updated_at: string
+}
+
+/** Seuil adapté d'un profil (un par polluant × période de moyennage). */
+export interface ExposureThreshold {
+  id: number
+  exposure_profile_id: number
+  parameter: string
+  /** Unité dérivée du référentiel (immuable, jamais saisie). */
+  unit: string
+  threshold_value: number
+  averaging_period: string
+  created_at: string
+}
+
+export interface ExposureProfileFilters {
+  scope?: 'system' | 'custom'
+  code?: ExposureCode
+}
+
+export interface CreateExposureProfileInput {
+  code: ExposureCode
+  name: string
+  description?: string
+}
+
+/** PATCH partiel — `code` IMMUABLE (absent) ; `description: ''` efface. */
+export interface UpdateExposureProfileInput {
+  name?: string
+  description?: string
+}
+
+export interface CreateThresholdInput {
+  parameter: Parameter
+  threshold_value: number
+  /** Défaut back : `1h`. */
+  averaging_period?: AveragingPeriod
+}
+
 // --- Erreur API normalisée ---
 export class ApiError extends Error {
   constructor(
