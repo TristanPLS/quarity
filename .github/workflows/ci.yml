@@ -114,7 +114,11 @@ jobs:
 
   # ===========================================================================
   front:
-    name: Front — typecheck · tests (vitest) · build
+    # NB: ne PAS renommer ce job — son nom est un *required status check* de la
+    # protection de branche `dev` (« Front — typecheck · build »). Le renommer
+    # laisse la PR bloquee en « Waiting for status to be reported ». L'etape de
+    # tests Vitest est ajoutee A L'INTERIEUR du job, sans toucher au nom.
+    name: Front — typecheck · build
     runs-on: ubuntu-latest
     defaults:
       run:
