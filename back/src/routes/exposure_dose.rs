@@ -11,6 +11,7 @@
 use axum::extract::{Path, State};
 use axum::Json;
 use chrono::{DateTime, Utc};
+use futures_util::stream::StreamExt;
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 use validator::Validate;
@@ -20,6 +21,14 @@ use crate::error::AppError;
 use crate::security::{AuthUser, CanWrite};
 use crate::state::AppState;
 use crate::validation::ValidatedQuery;
+
+/// Concurrence MAX des requêtes ClickHouse de dose (P3) : un profil à plusieurs seuils
+/// (1h/8h/24h × polluants) ne lance pas toutes ses requêtes en série — au plus ce
+/// nombre en vol. Les seuils par profil sont peu nombreux : 8 suffit largement.
+const DOSE_MAX_CONCURRENT_CH_QUERIES: usize = 8;
+
+/// Durée maximale d'une période de calcul de dose (A3, défense en profondeur).
+const DOSE_MAX_PERIOD_DAYS: i64 = 366;
 
 /// Valide une date `YYYY-MM-DD` (rejette aussi les dates impossibles, ex. 2026-13-40).
 fn validate_date_ymd(s: &str) -> Result<(), validator::ValidationError> {
@@ -169,10 +178,21 @@ pub async fn compute_dose(
     Path(id): Path<i64>,
     ValidatedQuery(q): ValidatedQuery<ComputeDoseQuery>,
 ) -> Result<Json<Vec<ExposureResultDto>>, AppError> {
-    // Comparaison lexicographique = chronologique pour `YYYY-MM-DD`.
-    if q.period_end < q.period_start {
+    // Dates déjà validées au format par `ValidatedQuery` : on les parse pour comparer
+    // chronologiquement ET borner la durée (A3 — défense en profondeur : le TTL 90 j de
+    // ClickHouse borne déjà le scan, mais on refuse une plage déraisonnable).
+    let start = chrono::NaiveDate::parse_from_str(&q.period_start, "%Y-%m-%d")
+        .map_err(|_| AppError::BadRequest("period_start invalide".into()))?;
+    let end = chrono::NaiveDate::parse_from_str(&q.period_end, "%Y-%m-%d")
+        .map_err(|_| AppError::BadRequest("period_end invalide".into()))?;
+    if end < start {
         return Err(AppError::BadRequest(
             "period_end doit être >= period_start".into(),
+        ));
+    }
+    if (end - start).num_days() > DOSE_MAX_PERIOD_DAYS {
+        return Err(AppError::BadRequest(
+            "période trop longue (max 366 jours)".into(),
         ));
     }
 
@@ -215,30 +235,52 @@ pub async fn compute_dose(
     .fetch_all(&state.pg)
     .await?;
 
-    for t in &thresholds {
-        let Some(avg_h) = avg_hours(&t.averaging_period) else {
-            continue; // annual (ou inconnu) : hors périmètre B9a-3
-        };
+    // P3 : les requêtes ClickHouse de dose (une par seuil 1h/8h/24h) tournent en PARALLÈLE
+    // bornée — l'ordre n'importe pas, chaque résultat est rattaché à son seuil par index.
+    // `annual` (et inconnu) est ignoré (hors périmètre B9a-3).
+    let jobs: Vec<(usize, u32)> = thresholds
+        .iter()
+        .enumerate()
+        .filter_map(|(i, t)| avg_hours(&t.averaging_period).map(|h| (i, h)))
+        .collect();
+    let doses: Vec<_> = futures_util::stream::iter(jobs.into_iter().map(|(i, avg_h)| {
+        let ch = state.ch.clone();
+        let stations = stations.clone();
+        let parameter = thresholds[i].parameter.clone();
+        let threshold = thresholds[i].threshold_value;
+        let from = q.period_start.clone();
+        let to = q.period_end.clone();
+        let tz = tlp.timezone.clone();
+        let start_min = tlp.start_min as u16;
+        let end_min = tlp.end_min as u16;
+        let days_mask = tlp.days_mask;
+        async move {
+            let r = ch
+                .query_exposure_dose(&DoseParams {
+                    locs: &stations,
+                    parameter: &parameter,
+                    avg_hours: avg_h,
+                    threshold,
+                    from: &from,
+                    to: &to,
+                    start_min,
+                    end_min,
+                    days_mask,
+                    tz: &tz,
+                })
+                .await;
+            (i, r)
+        }
+    }))
+    .buffer_unordered(DOSE_MAX_CONCURRENT_CH_QUERIES)
+    .collect()
+    .await;
 
-        let dose = state
-            .ch
-            .query_exposure_dose(&DoseParams {
-                locs: &stations,
-                parameter: &t.parameter,
-                avg_hours: avg_h,
-                threshold: t.threshold_value,
-                from: &q.period_start,
-                to: &q.period_end,
-                start_min: tlp.start_min as u16,
-                end_min: tlp.end_min as u16,
-                days_mask: tlp.days_mask,
-                tz: &tlp.timezone,
-            })
-            .await
-            .map_err(|e| AppError::Internal(e.into()))?;
-
-        // P3 : fige seuil + fenêtre (snapshot) et upsert `exposure_results`. La procédure
-        // re-résout le seuil à partir de (profil, polluant, période) — source de vérité.
+    // Upsert PG (séquentiel : écriture rapide). La procédure fige seuil + fenêtre
+    // (snapshot) et re-résout le seuil depuis (profil, polluant, période de moyennage).
+    for (i, dose) in doses {
+        let dose = dose.map_err(|e| AppError::Internal(e.into()))?;
+        let t = &thresholds[i];
         let _result_id: i64 = sqlx::query_scalar(
             "CALL compute_exposure_dose($1, $2, $3::date, $4::date, $5::numeric, $6, $7, NULL)",
         )
