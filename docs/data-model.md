@@ -126,7 +126,7 @@ Conventions : PK `BIGINT GENERATED ALWAYS AS IDENTITY` (référentiels en `INT`)
 | Orgs, users, rôles, memberships, abos, tokens | **Postgres** |
 | Lieux suivis, règles, profils, seuils, plages | **Postgres** |
 | Référentiel stations/capteurs OpenAQ | **Postgres** (`ref_locations`/`ref_sensors`) |
-| Breakpoints AQI EPA | **Postgres** (`aqi_categories`/`aqi_breakpoints`) |
+| Breakpoints AQI EPA | **Postgres** (`aqi_breakpoints`, référence métier) — ⚠️ le **calcul AQI à l'exécution** lit un **miroir verbatim embarqué dans le CTE ClickHouse** (`rolling_regulatory.sql` Q2 / `aqi_snapshot.sql`), pas la table PG ; les deux sont tenus identiques par `ch.rs::aqi_breakpoints_postgres_matches_clickhouse_cte` |
 | **Mesures brutes & rollups** | **ClickHouse** |
 | **Alertes (faits figés)** | **Postgres** (`alert_events`) |
 | Doses d'exposition | **Calcul ClickHouse** + cache `exposure_results` (PG) |
