@@ -32,6 +32,8 @@ use serde_json::Value;
 const SQL_FILE: &str = include_str!("../../db/clickhouse/queries/rolling_regulatory.sql");
 /// Canonique de la dose (B9a-3) — comparé à la copie embarquée `ch::EXPOSURE_DOSE_SQL`.
 const EXPOSURE_DOSE_CANONICAL: &str = include_str!("../../db/clickhouse/queries/exposure_dose.sql");
+/// Seed Postgres — pour l'anti-dérive croisé des paliers AQI (PG table ↔ CTE ClickHouse).
+const PG_SEED: &str = include_str!("../../db/sql/02_seed.sql");
 const SEP_Q1: &str = "-- ===== Q1 : rolling_regulatory =====";
 const SEP_Q2: &str = "-- ===== Q2 : aqi_snapshot =====";
 const SEP_Q3: &str = "-- ===== Q3 : o3_daily_max_8h =====";
@@ -111,6 +113,117 @@ fn embedded_exposure_dose_sql_matches_canonical() {
         norm(EXPOSURE_DOSE_CANONICAL),
         "back/src/exposure_dose.sql a DÉRIVÉ du canonique \
          db/clickhouse/queries/exposure_dose.sql — répercuter la modification."
+    );
+}
+
+/// Clé normalisée d'un palier AQI : `parameter|conc_low|conc_high|aqi_low|aqi_high`.
+/// conc_* sur 3 décimales (NUMERIC(10,3) côté PG), aqi_* entiers — comparables des deux côtés.
+fn breakpoint_key(
+    param: &str,
+    conc_low: &str,
+    conc_high: &str,
+    aqi_low: &str,
+    aqi_high: &str,
+) -> String {
+    let f = |s: &str| {
+        s.trim()
+            .parse::<f64>()
+            .unwrap_or_else(|_| panic!("nombre attendu : {s:?}"))
+    };
+    format!(
+        "{}|{:.3}|{:.3}|{:.0}|{:.0}",
+        param,
+        f(conc_low),
+        f(conc_high),
+        f(aqi_low),
+        f(aqi_high)
+    )
+}
+
+/// Intégrité AQI Postgres ↔ ClickHouse (constat A4 / P1-3, jusque-là OUVERT).
+///
+/// Les 24 paliers AQI EPA sont dupliqués entre le seed Postgres (table `aqi_breakpoints`,
+/// la « source de vérité métier » de data-model.md) et le CTE `breakpoints` du SQL
+/// ClickHouse (`rolling_regulatory.sql` Q2), QUI EST le calcul réellement exécuté à
+/// l'exécution (le back ne lit jamais la table PG — il sert le CTE embarqué). Le seul
+/// test anti-dérive existant ne compare que CH↔CH (copie embarquée vs canonique) : une
+/// modification d'un SEUL côté PG/CH faussait l'AQI EN SILENCE.
+///
+/// Ce test croise les DEUX sources sur (parameter, conc_low, conc_high, aqi_low, aqi_high).
+/// Pur (aucune base) — extraction par lignes des `VALUES` (un tuple par ligne des deux côtés).
+#[test]
+fn aqi_breakpoints_postgres_matches_clickhouse_cte() {
+    // --- ClickHouse : le CTE `breakpoints` (entre "breakpoints AS" et le CTE suivant "win AS") ---
+    let ch_start = SQL_FILE
+        .find("breakpoints AS")
+        .expect("CTE breakpoints dans rolling_regulatory.sql");
+    let ch_end = SQL_FILE[ch_start..]
+        .find("win AS")
+        .map(|i| i + ch_start)
+        .expect("CTE win après breakpoints");
+    let mut ch: Vec<String> = SQL_FILE[ch_start..ch_end]
+        .lines()
+        .map(str::trim)
+        .filter(|l| l.starts_with("('")) // lignes de tuple : ('param', cl, ch, al, ah)
+        .map(|l| {
+            let inner = l
+                .trim_start_matches('(')
+                .trim_end_matches(',')
+                .trim_end_matches(')');
+            let f: Vec<&str> = inner.split(',').map(str::trim).collect();
+            assert_eq!(f.len(), 5, "tuple breakpoint ClickHouse à 5 champs : {l}");
+            breakpoint_key(f[0].trim_matches('\''), f[1], f[2], f[3], f[4])
+        })
+        .collect();
+
+    // --- Postgres : les 4 blocs `INSERT INTO aqi_breakpoints` du seed ---
+    let pg_start = PG_SEED
+        .find("INSERT INTO aqi_breakpoints")
+        .expect("INSERT aqi_breakpoints dans 02_seed.sql");
+    let pg_end = PG_SEED[pg_start..]
+        .find("INSERT INTO exposure_profiles")
+        .map(|i| i + pg_start)
+        .unwrap_or(PG_SEED.len());
+    let mut pg: Vec<String> = Vec::new();
+    for block in PG_SEED[pg_start..pg_end]
+        .split("INSERT INTO aqi_breakpoints")
+        .filter(|b| b.contains("p.code"))
+    {
+        // Polluant du bloc : `WHERE p.code = 'xxx'`.
+        let key = "p.code = '";
+        let i = block.find(key).expect("p.code dans le bloc") + key.len();
+        let j = block[i..].find('\'').expect("fin du code polluant") + i;
+        let param = &block[i..j];
+        // Lignes de tuple `(cat, cl, ch, al, ah),` — commencent par '(' suivi d'un chiffre.
+        for l in block
+            .lines()
+            .map(str::trim)
+            .filter(|l| l.starts_with('(') && l.chars().nth(1).is_some_and(|c| c.is_ascii_digit()))
+        {
+            let inner = l
+                .trim_start_matches('(')
+                .trim_end_matches(',')
+                .trim_end_matches(')');
+            let f: Vec<&str> = inner.split(',').map(str::trim).collect();
+            assert_eq!(f.len(), 5, "tuple breakpoint Postgres à 5 champs : {l}");
+            // f = (cat, cl, ch, al, ah) — cat (catégorie) ignorée : le CTE CH ne la porte pas.
+            pg.push(breakpoint_key(param, f[1], f[2], f[3], f[4]));
+        }
+    }
+
+    ch.sort();
+    pg.sort();
+    assert_eq!(
+        pg.len(),
+        24,
+        "24 paliers attendus côté Postgres (6 cat. × 4 polluants)"
+    );
+    assert_eq!(ch.len(), 24, "24 paliers attendus côté ClickHouse");
+    assert_eq!(
+        pg, ch,
+        "Les paliers AQI ont DÉRIVÉ entre db/sql/02_seed.sql (Postgres, aqi_breakpoints) \
+         et le CTE `breakpoints` de db/clickhouse/queries/rolling_regulatory.sql (calcul \
+         RÉEL de l'AQI) — toute modification doit être répercutée des DEUX côtés."
     );
 }
 
