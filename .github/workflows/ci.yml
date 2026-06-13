@@ -114,7 +114,7 @@ jobs:
 
   # ===========================================================================
   front:
-    name: Front — typecheck · build
+    name: Front — typecheck · tests (vitest) · build
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -128,6 +128,7 @@ jobs:
           cache-dependency-path: front/package-lock.json
       - run: npm ci
       - run: npm run typecheck
+      - run: npm run test:run
       - run: npm run build
 
   # ===========================================================================
