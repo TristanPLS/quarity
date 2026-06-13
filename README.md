@@ -26,14 +26,28 @@ Quarity permet à une **collectivité**, une **autorité sanitaire**, un **étab
 ## Lancement
 
 ```bash
-cp .env.example .env   # .env.example livré au Jalon 2
+cp .env.example .env
+# Générer un vrai JWT_SECRET — le back REFUSE de démarrer avec le placeholder du .env.example :
+openssl rand -hex 32          # coller la valeur dans JWT_SECRET=… du .env
+# Renseigner aussi OPENAQ_API_KEY (clé gratuite https://openaq.org/) pour l'ingestion.
 docker compose up -d
+docker compose --profile seed run --rm seed     # jeu de démo (orgs, lieux, règles, profils)
 ```
 
-**Jalon 3 largement avancé** (le walking skeleton du Jalon 2 est acquis) : CRUD complet (B6, 20 endpoints), boucle de matching temps réel (B7, cache Moka L1), alertes WebSocket (B8/B8b, `/api/ws`), 1ʳᵉ feature front « vue d'ensemble AQI » (B10). Détail de l'avancement : [`docs/backlog.md`](docs/backlog.md) · plan d'ensemble : [`roadmap.md`](roadmap.md).
+**Périmètre fonctionnel des 3 jalons livré** : CRUD complet (B6, ~44 endpoints REST), boucle de matching temps réel (B7, cache Moka L1), alertes WebSocket (B8/B8b, `/api/ws`) **consommées par le client front temps réel** (B11a), **carte + jauges AQI** (B10/B10b), **profils d'exposition + calcul de dose** (B9a), **API publique par clé** (B9b), **CRUD front** lieux/règles/profils/expositions + **responsive** (B11b/c). Le **Jalon 4** (recette, benchmarks, déploiement, tag `v1.0`) reste à finaliser. Détail : [`docs/backlog.md`](docs/backlog.md) · plan : [`roadmap.md`](roadmap.md).
 
 - Front : http://localhost:3000
 - Doc API (Swagger / OpenAPI via utoipa) : http://localhost:3000/api/docs *(servie par le back, proxy nginx `/api`)*
+
+### Comptes de démo
+
+Après le seed (mot de passe commun de démo `Quarity2026!`) :
+
+| Compte | Rôle | Organisation |
+|---|---|---|
+| `sophie@agglo-riviera.fr` | admin | Agglo Riviera (org A) |
+
+Station réelle ingérable : `location_id=4085` (NICE PROMENADE) — `docker compose --profile ingest run --rm ingest 4085`.
 
 ## Équipe
 

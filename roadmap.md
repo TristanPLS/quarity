@@ -177,16 +177,16 @@ Travail en parallèle sur 4 axes.
 ### Axe front
 
 - [ ] Charte graphique propre (voir `docs/identity.md`) → page design system
-- [ ] Écrans : dashboard (carte + AQI), lieux suivis, règles d'alerte, détail d'un lieu (séries temporelles + moyennes glissantes + jauge AQI + calendar-heatmap), profils d'exposition, analytics/comparaison, profil/org
-- [ ] Responsive mobile + desktop
-- [ ] WebSocket client pour les alertes temps réel
+- [X] Écrans : dashboard (carte + AQI + séries temporelles), lieux suivis, règles d'alerte, profils d'exposition, expositions (dose) — livrés (B10/B11b/c). *(Différés : analytics/comparaison, page profil/org, calendar-heatmap.)*
+- [X] Responsive mobile + desktop *(B11c-3, < 768px)*
+- [X] WebSocket client pour les alertes temps réel *(B11a — hook `useAlertsSocket` + `AlertsPanel`)*
 - [ ] **Interdit** : Bootstrap default ou Tailwind starter « tel quel » — personnalise.
 
 ### Axe doc
 
-- [ ] **Captures en continu** : à chaque feature finie, screenshot dans `docs/captures/` (board, Swagger, DBeaver, clickhouse-client, app)
-- [ ] Documentation produit au fil de l'eau (pitch, identité, README à jour)
-- [ ] Revue d'itération régulière documentée
+- [X] **Captures en continu** : screenshots dans `docs/captures/` (18 captures du 06-07 au 06-12 : login, dashboard, carte, alertes, lieux, règles, profils, expositions, mobile, Swagger, board)
+- [X] Documentation produit au fil de l'eau (pitch, identité, README à jour)
+- [X] Revue d'itération régulière documentée *(logs/ horodatés par mission)*
 
 ---
 
