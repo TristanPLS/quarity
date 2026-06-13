@@ -52,6 +52,10 @@ pub struct ExposureResultDto {
     pub tracked_location_profile_id: i64,
     #[schema(example = "pm25")]
     pub parameter: String,
+    /// Fenêtre de moyennage du seuil (`1h`/`8h`/`24h`) — discrimine deux doses du
+    /// même polluant sur des fenêtres différentes.
+    #[schema(example = "24h")]
+    pub averaging_period: String,
     /// Seuil appliqué (figé au calcul).
     #[schema(example = 15.0)]
     pub threshold_value: f64,
@@ -75,6 +79,7 @@ pub struct ExposureResultDto {
 const RESULT_COLUMNS: &str = r#"
     id, tracked_location_profile_id,
     (SELECT p.code FROM parameters p WHERE p.id = exposure_results.parameter_id) AS parameter,
+    averaging_period,
     threshold_value::float8 AS threshold_value,
     period_start::text AS period_start, period_end::text AS period_end,
     window_start_time::text AS window_start_time, window_end_time::text AS window_end_time,
@@ -129,7 +134,7 @@ async fn read_results(
     sqlx::query_as::<_, ExposureResultDto>(&format!(
         "SELECT {RESULT_COLUMNS} FROM exposure_results \
          WHERE tracked_location_profile_id = $1 AND period_start = $2::date AND period_end = $3::date \
-         ORDER BY parameter"
+         ORDER BY parameter, averaging_period"
     ))
     .bind(tlp_id)
     .bind(from)
@@ -286,7 +291,7 @@ pub async fn list_results(
 
     let results = sqlx::query_as::<_, ExposureResultDto>(&format!(
         "SELECT {RESULT_COLUMNS} FROM exposure_results \
-         WHERE tracked_location_profile_id = $1 ORDER BY period_end DESC, parameter"
+         WHERE tracked_location_profile_id = $1 ORDER BY period_end DESC, parameter, averaging_period"
     ))
     .bind(id)
     .fetch_all(&state.pg)
