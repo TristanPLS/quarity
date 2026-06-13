@@ -223,9 +223,20 @@ services:
     container_name: quarity_front
     restart: unless-stopped
     ports:
-      - "${FRONT_PORT:-3000}:80"
+      # Cote conteneur = 8080 (nginx-unprivileged, non-root). Cote hote inchange (3000).
+      - "${FRONT_PORT:-3000}:8080"
     depends_on:
-      - back
+      # Attendre la SANTE du back (migrations appliquees + serveur en ecoute) et pas juste
+      # son demarrage : evite l'ecran d'erreur transitoire au boot si le back est plus lent (A2).
+      back: { condition: service_healthy }
+    healthcheck:
+      # wget fourni par busybox (image alpine). 127.0.0.1 (PAS localhost) : busybox wget
+      # tenterait ::1 d'abord, or `listen 8080` n'ecoute qu'en IPv4. Un 200 sur / = front pret.
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
 volumes:
   pgdata:
