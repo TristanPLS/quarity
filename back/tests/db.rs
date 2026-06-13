@@ -899,3 +899,93 @@ async fn t7_pure_snapshot_event_without_refs_is_allowed() {
     .expect("un event snapshot pur (référents NULL) doit être accepté");
     assert_eq!(res.rows_affected(), 1);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// T8 — tracked_location_profiles : isolation lieu × profil d'exposition (0008)
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn t8_foreign_custom_profile_association_is_rejected() {
+    let pool = pool().await;
+    let mut tx = pool.begin().await.unwrap();
+    let cityair = org_id(&mut tx, "cityair").await;
+    let ecole = location_id(&mut tx, "École Jules-Ferry").await; // org = agglo-riviera
+                                                                 // Profil CUSTOM appartenant à cityair (≠ org du lieu).
+    let foreign_profile: i64 = sqlx::query_scalar(
+        "INSERT INTO exposure_profiles (org_id, code, name, is_system)
+         VALUES ($1, 'general', 'Custom cityair', false) RETURNING id",
+    )
+    .bind(cityair)
+    .fetch_one(&mut *tx)
+    .await
+    .expect("création d'un profil custom cityair");
+    // Associer un profil d'org B à un lieu d'org A → refus T8.
+    let err = sqlx::query(
+        "INSERT INTO tracked_location_profiles
+            (tracked_location_id, exposure_profile_id, start_time, end_time, days_mask)
+         VALUES ($1, $2, '08:00', '17:00', 31)",
+    )
+    .bind(ecole)
+    .bind(foreign_profile)
+    .execute(&mut *tx)
+    .await
+    .expect_err("associer un profil custom d'une AUTRE org doit être refusé");
+    assert!(
+        err.to_string().contains("QRT_T8"),
+        "erreur T8 attendue : {err}"
+    );
+}
+
+#[tokio::test]
+async fn t8_system_profile_association_is_allowed() {
+    let pool = pool().await;
+    let mut tx = pool.begin().await.unwrap();
+    let ecole = location_id(&mut tx, "École Jules-Ferry").await; // org = agglo-riviera
+                                                                 // Profil SYSTÈME (org_id NULL) — 'general' (≠ 'enfants' déjà lié à l'École par le
+                                                                 // seed, ce qui heurterait uq_tlp) : utilisable par toute org.
+    let sys_profile: i64 = sqlx::query_scalar(
+        "SELECT id FROM exposure_profiles WHERE code = 'general' AND org_id IS NULL AND is_system",
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .expect("profil système 'general' (seed)");
+    let res = sqlx::query(
+        "INSERT INTO tracked_location_profiles
+            (tracked_location_id, exposure_profile_id, start_time, end_time, days_mask)
+         VALUES ($1, $2, '08:00', '17:00', 31)",
+    )
+    .bind(ecole)
+    .bind(sys_profile)
+    .execute(&mut *tx)
+    .await
+    .expect("un profil système doit être associable à n'importe quel lieu");
+    assert_eq!(res.rows_affected(), 1);
+}
+
+#[tokio::test]
+async fn t8_same_org_custom_profile_association_is_allowed() {
+    let pool = pool().await;
+    let mut tx = pool.begin().await.unwrap();
+    let agglo = org_id(&mut tx, "agglo-riviera").await;
+    let ecole = location_id(&mut tx, "École Jules-Ferry").await; // org = agglo-riviera
+                                                                 // Profil CUSTOM de la MÊME org que le lieu → autorisé.
+    let own_profile: i64 = sqlx::query_scalar(
+        "INSERT INTO exposure_profiles (org_id, code, name, is_system)
+         VALUES ($1, 'sportifs', 'Custom agglo', false) RETURNING id",
+    )
+    .bind(agglo)
+    .fetch_one(&mut *tx)
+    .await
+    .expect("création d'un profil custom agglo");
+    let res = sqlx::query(
+        "INSERT INTO tracked_location_profiles
+            (tracked_location_id, exposure_profile_id, start_time, end_time, days_mask)
+         VALUES ($1, $2, '08:00', '17:00', 31)",
+    )
+    .bind(ecole)
+    .bind(own_profile)
+    .execute(&mut *tx)
+    .await
+    .expect("un profil custom de la MÊME org doit être accepté");
+    assert_eq!(res.rows_affected(), 1);
+}
