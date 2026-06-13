@@ -287,6 +287,33 @@ async fn compute_dose_rejects_inverted_period() {
 }
 
 #[tokio::test]
+async fn compute_dose_rejects_overlong_period() {
+    // A3 : une plage > 366 jours est refusée (400) — défense en profondeur, même si le
+    // TTL 90 j de ClickHouse borne déjà le scan réel.
+    let base = spawn_app().await;
+    let pool = pg_pool().await;
+    let org = create_test_org(&pool).await;
+    let token = access_token(&base, &org.admin_email).await;
+
+    let station = new_station_id();
+    register_station(&pool, station).await;
+    let loc = create_location(&base, &token, station).await;
+    let profile = create_profile_with_threshold(&base, &token).await;
+    let tlp = create_tlp(&base, &token, loc, profile).await;
+
+    // 2025-01-01 → 2026-12-31 = 729 jours.
+    let (st, _) = post_empty(
+        &base,
+        &token,
+        &format!(
+            "/api/tracked-location-profiles/{tlp}/compute-dose?period_start=2025-01-01&period_end=2026-12-31"
+        ),
+    )
+    .await;
+    assert_eq!(st, 400, "période > 366 jours rejetée");
+}
+
+#[tokio::test]
 async fn compute_dose_with_only_annual_threshold_returns_empty() {
     // Un profil dont le SEUL seuil est `annual` (hors périmètre B9a-3) : compute-dose
     // renvoie une liste vide, sans erreur (les seuils annuels sont ignorés).
