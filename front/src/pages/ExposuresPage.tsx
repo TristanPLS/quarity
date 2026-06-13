@@ -685,7 +685,9 @@ function DoseModal({
             <tbody>
               {results.map((r) => (
                 <tr key={r.id}>
-                  <td>{paramLabel(r.parameter)}</td>
+                  <td>
+                    {paramLabel(r.parameter)} <span className={styles.mono}>({r.averaging_period})</span>
+                  </td>
                   <td className={styles.mono}>{r.threshold_value}</td>
                   <td className={styles.mono}>
                     {r.period_start} → {r.period_end}

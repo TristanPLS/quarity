@@ -199,6 +199,10 @@ async fn compute_dose_counts_hours_over_threshold() {
     );
     let r = &results[0];
     assert_eq!(r["parameter"], "pm25");
+    assert_eq!(
+        r["averaging_period"], "1h",
+        "fenêtre du seuil exposée : {r:?}"
+    );
     assert_eq!(r["threshold_value"].as_f64(), Some(15.0));
     assert_eq!(
         r["hours_over_threshold"].as_f64(),
@@ -330,5 +334,90 @@ async fn compute_dose_with_only_annual_threshold_returns_empty() {
         body.as_array().map(Vec::len),
         Some(0),
         "seuils annual ignorés → aucun résultat"
+    );
+}
+
+#[tokio::test]
+async fn compute_dose_distinguishes_averaging_periods_for_same_parameter() {
+    // RÉGRESSION (correctif migration 0007) : un profil avec le MÊME polluant sur
+    // deux fenêtres (pm25 1h ET pm25 24h) doit produire DEUX lignes de dose
+    // distinctes. AVANT le correctif, `uq_exposure_result` ne portait pas
+    // `averaging_period` → la 2e dose écrasait la 1re (ON CONFLICT DO UPDATE) et
+    // `compute-dose`/`results` ne renvoyaient qu'UNE ligne (chiffre faux, US-08).
+    let base = spawn_app().await;
+    let pool = pg_pool().await;
+    let org = create_test_org(&pool).await;
+    let token = access_token(&base, &org.admin_email).await;
+
+    let station = new_station_id();
+    register_station(&pool, station).await;
+    let loc = create_location(&base, &token, station).await;
+
+    // Profil custom avec pm25 déclaré sur 1h ET 24h.
+    let (_, body) = post(
+        &base,
+        &token,
+        "/api/exposure-profiles",
+        json!({ "code": "general", "name": "Multi-fenetres" }),
+    )
+    .await;
+    let pid = body["id"].as_i64().expect("profile id");
+    for avg in ["1h", "24h"] {
+        let (st, b) = post(
+            &base,
+            &token,
+            &format!("/api/exposure-profiles/{pid}/thresholds"),
+            json!({ "parameter": "pm25", "threshold_value": 15.0, "averaging_period": avg }),
+        )
+        .await;
+        assert_eq!(st, 201, "seuil {avg} : {b:?}");
+    }
+    let tlp = create_tlp(&base, &token, loc, pid).await;
+
+    let day = (Utc::now() - Duration::days(7))
+        .format("%Y-%m-%d")
+        .to_string();
+    for (h, v) in [(8, 20.0), (9, 30.0), (10, 25.0)] {
+        insert_ch(station, "pm25", v, &format!("{day} {h:02}:15:00")).await;
+    }
+
+    let (st, body) = post_empty(
+        &base,
+        &token,
+        &format!(
+            "/api/tracked-location-profiles/{tlp}/compute-dose?period_start={day}&period_end={day}"
+        ),
+    )
+    .await;
+    assert_eq!(st, 200, "compute-dose : {body:?}");
+    let results = body.as_array().expect("liste de résultats");
+    assert_eq!(
+        results.len(),
+        2,
+        "une dose PAR fenêtre (1h + 24h), pas une seule (collision) : {body:?}"
+    );
+    let mut periods: Vec<&str> = results
+        .iter()
+        .map(|r| r["averaging_period"].as_str().expect("averaging_period"))
+        .collect();
+    periods.sort_unstable();
+    assert_eq!(
+        periods,
+        ["1h", "24h"],
+        "les deux fenêtres distinctes : {body:?}"
+    );
+
+    // Le cache relu (`GET …/results`) garde bien les deux lignes.
+    let (st, list) = get(
+        &base,
+        &token,
+        &format!("/api/tracked-location-profiles/{tlp}/results"),
+    )
+    .await;
+    assert_eq!(st, 200);
+    assert_eq!(
+        list.as_array().map(Vec::len),
+        Some(2),
+        "cache : 2 lignes distinctes (pas d'écrasement)"
     );
 }

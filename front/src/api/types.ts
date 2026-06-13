@@ -433,6 +433,7 @@ export interface ExposureResult {
   id: number
   tracked_location_profile_id: number
   parameter: string
+  averaging_period: string
   threshold_value: number
   period_start: string
   period_end: string

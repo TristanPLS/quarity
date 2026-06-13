@@ -318,10 +318,10 @@ JOIN tracked_locations tl ON tl.name = v.loc_name
 JOIN exposure_profiles ep ON ep.code = v.profile_code AND ep.is_system;
 
 -- exposure_results : 1 dose pré-calculée (snapshot de fenêtre pour reproductibilité — US-08)
-INSERT INTO exposure_results (tracked_location_profile_id, parameter_id, period_start, period_end,
+INSERT INTO exposure_results (tracked_location_profile_id, parameter_id, averaging_period, period_start, period_end,
                               threshold_value, window_start_time, window_end_time, window_days_mask, timezone,
                               hours_over_threshold, sample_count)
-SELECT tlp.id, p.id, DATE '2026-05-01', DATE '2026-05-31', et.threshold_value,
+SELECT tlp.id, p.id, et.averaging_period, DATE '2026-05-01', DATE '2026-05-31', et.threshold_value,
        tlp.start_time, tlp.end_time, tlp.days_mask, tlp.timezone, 3.0, 220
 FROM tracked_location_profiles tlp
 JOIN tracked_locations tl   ON tl.id = tlp.tracked_location_id AND tl.name = 'École Jules-Ferry'
