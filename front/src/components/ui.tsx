@@ -85,6 +85,54 @@ export function Badge({ tone = 'neutral', dot, children }: { tone?: BadgeTone; d
   )
 }
 
+/* ===== États de page partagés (chargement / vide / erreur) ===== */
+/** Spinner accessible (`aria-hidden`). `lg` = états de page (18px) ; `sm` = inline. */
+export function Spinner({ size = 'lg' }: { size?: 'sm' | 'lg' }) {
+  return <span className={size === 'sm' ? styles.spinner : styles.spinnerLg} aria-hidden="true" />
+}
+
+/** Encart d'état neutre (chargement / vide). `ariaLive` pour annoncer un chargement. */
+export function StateBox({
+  children,
+  ariaLive,
+  className = '',
+}: {
+  children: ReactNode
+  ariaLive?: 'polite' | 'assertive'
+  className?: string
+}) {
+  return (
+    <div className={[styles.stateBox, className].filter(Boolean).join(' ')} aria-live={ariaLive}>
+      {children}
+    </div>
+  )
+}
+
+/** Encart d'erreur (`role="alert"`) avec titre, message et bouton Réessayer optionnel. */
+export function ErrorState({
+  title,
+  message,
+  onRetry,
+  className = '',
+}: {
+  title: string
+  message?: ReactNode
+  onRetry?: () => void
+  className?: string
+}) {
+  return (
+    <div role="alert" className={[styles.alertError, className].filter(Boolean).join(' ')}>
+      <strong>{title}</strong>
+      {message != null && <span>{message}</span>}
+      {onRetry && (
+        <button type="button" className={styles.retry} onClick={onRetry}>
+          Réessayer
+        </button>
+      )}
+    </div>
+  )
+}
+
 /* ===== AqiBadge (échelle EPA — couleur JAMAIS seule ; barème dans ./aqi) ===== */
 export function AqiBadge({ level, value, unit, size = 'md' }: { level: AqiLevel; value: number | string; unit?: string; size?: 'sm' | 'md' }) {
   const info = AQI_SCALE[level]

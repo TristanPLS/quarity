@@ -15,7 +15,7 @@ import {
   type UpdateTlpInput,
 } from '../api/types'
 import { useCanWrite } from '../auth/usePermissions'
-import { Badge, Button, Input } from '../components/ui'
+import { Badge, Button, ErrorState, Input, Spinner, StateBox } from '../components/ui'
 import { Modal } from '../components/Modal'
 import { useTrackedLocationProfiles, type ExposuresQuery } from '../features/exposures/useTrackedLocationProfiles'
 import styles from './ExposuresPage.module.css'
@@ -185,26 +185,20 @@ export function ExposuresPage() {
       </div>
 
       {status === 'loading' && (
-        <div className={styles.stateBox} aria-live="polite">
-          <span className={styles.spinner} aria-hidden="true" /> Chargement des expositions…
-        </div>
+        <StateBox ariaLive="polite">
+          <Spinner /> Chargement des expositions…
+        </StateBox>
       )}
 
       {status === 'error' && (
-        <div role="alert" className={styles.alertError}>
-          <strong>Impossible de charger les expositions.</strong>
-          <span>{error}</span>
-          <button type="button" className={styles.retry} onClick={reload}>
-            Réessayer
-          </button>
-        </div>
+        <ErrorState title="Impossible de charger les expositions." message={error} onRetry={reload} />
       )}
 
       {status === 'success' && rows.length === 0 && (
-        <div className={styles.stateBox}>
+        <StateBox>
           {filtered ? 'Aucune exposition ne correspond à ces critères.' : 'Aucune exposition pour le moment.'}
           {canWrite && !filtered && !missingRefs && <> Créez-en une avec « Nouvelle exposition ».</>}
-        </div>
+        </StateBox>
       )}
 
       {status === 'success' && rows.length > 0 && (
@@ -654,9 +648,9 @@ function DoseModal({
       )}
 
       {status === 'loading' && (
-        <div className={styles.stateBox} aria-live="polite">
-          <span className={styles.spinner} aria-hidden="true" /> Chargement…
-        </div>
+        <StateBox ariaLive="polite">
+          <Spinner /> Chargement…
+        </StateBox>
       )}
       {status === 'error' && (
         <div role="alert" className={styles.formError}>
