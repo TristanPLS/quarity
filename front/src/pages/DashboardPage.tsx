@@ -13,7 +13,7 @@ import {
 import { ApiError, PARAMETERS, paramLabel, type Parameter } from '../api/types'
 import { formatFull, formatTick } from '../lib/datetime'
 import { useMeasurements, type ChartPoint, type MeasurementQuery } from '../features/measurements/useMeasurements'
-import { Button } from '../components/ui'
+import { Button, ErrorState, Spinner, StateBox } from '../components/ui'
 import { AqiOverviewSection } from '../features/aqi/AqiOverviewSection'
 import { AlertsPanel } from '../features/alerts/AlertsPanel'
 import styles from './DashboardPage.module.css'
@@ -135,23 +135,22 @@ export function DashboardPage() {
         )}
 
         {status === 'error' && (
-          <div role="alert" className={styles.alertError}>
-            <strong>Impossible de charger les mesures.</strong>
-            <span>{error}</span>
-            <button type="button" className={styles.retry} onClick={() => runQuery(form)}>
-              Réessayer
-            </button>
-          </div>
+          <ErrorState
+            className={styles.spaced}
+            title="Impossible de charger les mesures."
+            message={error}
+            onRetry={() => runQuery(form)}
+          />
         )}
 
         {isLoading && (
-          <div className={styles.stateBox} aria-live="polite">
-            <span className={styles.spinner} aria-hidden="true" /> Chargement des mesures…
-          </div>
+          <StateBox ariaLive="polite" className={styles.spaced}>
+            <Spinner /> Chargement des mesures…
+          </StateBox>
         )}
 
         {isEmpty && (
-          <div className={styles.stateBox}>Aucune mesure pour cette station, ce paramètre et cette plage.</div>
+          <StateBox className={styles.spaced}>Aucune mesure pour cette station, ce paramètre et cette plage.</StateBox>
         )}
 
         {status === 'success' && points.length > 0 && (

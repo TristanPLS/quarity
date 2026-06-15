@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { render, screen } from '@testing-library/react'
-import { AqiBadge, Badge } from './ui'
+import { render, screen, fireEvent } from '@testing-library/react'
+import { AqiBadge, Badge, ErrorState, Spinner, StateBox } from './ui'
 import { aqiLevelFromValue } from './aqi'
 
 describe('aqiLevelFromValue', () => {
@@ -28,5 +28,41 @@ describe('AqiBadge', () => {
     expect(screen.getByText('42')).toBeTruthy()
     const status = screen.getByRole('status')
     expect(status.getAttribute('aria-label')).toContain('Bon')
+  })
+})
+
+describe('Spinner', () => {
+  it('est décoratif (aria-hidden)', () => {
+    const { container } = render(<Spinner />)
+    expect(container.querySelector('span')?.getAttribute('aria-hidden')).toBe('true')
+  })
+})
+
+describe('StateBox', () => {
+  it('affiche ses enfants et annonce via aria-live quand demandé', () => {
+    render(<StateBox ariaLive="polite">Chargement…</StateBox>)
+    const box = screen.getByText('Chargement…')
+    expect(box.getAttribute('aria-live')).toBe('polite')
+  })
+})
+
+describe('ErrorState', () => {
+  it('affiche titre + message dans un role alert', () => {
+    render(<ErrorState title="Oups" message="détail" />)
+    const alert = screen.getByRole('alert')
+    expect(alert.textContent).toContain('Oups')
+    expect(alert.textContent).toContain('détail')
+  })
+
+  it('appelle onRetry au clic sur Réessayer', () => {
+    let called = 0
+    render(<ErrorState title="Oups" onRetry={() => { called += 1 }} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Réessayer' }))
+    expect(called).toBe(1)
+  })
+
+  it('sans onRetry : aucun bouton', () => {
+    render(<ErrorState title="Oups" />)
+    expect(screen.queryByRole('button')).toBeNull()
   })
 })

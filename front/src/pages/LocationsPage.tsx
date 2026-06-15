@@ -7,7 +7,7 @@ import {
   type UpdateTrackedLocationInput,
 } from '../api/types'
 import { useCanWrite } from '../auth/usePermissions'
-import { Badge, Button, Input } from '../components/ui'
+import { Badge, Button, ErrorState, Input, Spinner, StateBox } from '../components/ui'
 import { Modal } from '../components/Modal'
 import { useTrackedLocations, type LocationsQuery } from '../features/locations/useTrackedLocations'
 import styles from './LocationsPage.module.css'
@@ -124,26 +124,20 @@ export function LocationsPage() {
       </div>
 
       {status === 'loading' && (
-        <div className={styles.stateBox} aria-live="polite">
-          <span className={styles.spinner} aria-hidden="true" /> Chargement des lieux…
-        </div>
+        <StateBox ariaLive="polite">
+          <Spinner /> Chargement des lieux…
+        </StateBox>
       )}
 
       {status === 'error' && (
-        <div role="alert" className={styles.alertError}>
-          <strong>Impossible de charger les lieux.</strong>
-          <span>{error}</span>
-          <button type="button" className={styles.retry} onClick={reload}>
-            Réessayer
-          </button>
-        </div>
+        <ErrorState title="Impossible de charger les lieux." message={error} onRetry={reload} />
       )}
 
       {status === 'success' && rows.length === 0 && (
-        <div className={styles.stateBox}>
+        <StateBox>
           {filtered ? 'Aucun lieu ne correspond à ces critères.' : 'Aucun lieu suivi pour le moment.'}
           {canWrite && !filtered && <> Créez-en un avec « Nouveau lieu ».</>}
-        </div>
+        </StateBox>
       )}
 
       {status === 'success' && rows.length > 0 && (

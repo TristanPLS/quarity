@@ -17,7 +17,7 @@ import {
   type UpdateExposureProfileInput,
 } from '../api/types'
 import { useCanWrite } from '../auth/usePermissions'
-import { Badge, Button, Input } from '../components/ui'
+import { Badge, Button, ErrorState, Input, Spinner, StateBox } from '../components/ui'
 import { Modal } from '../components/Modal'
 import { useExposureProfiles, type ProfilesQuery } from '../features/profiles/useExposureProfiles'
 import styles from './ProfilesPage.module.css'
@@ -129,26 +129,20 @@ export function ProfilesPage() {
       </div>
 
       {status === 'loading' && (
-        <div className={styles.stateBox} aria-live="polite">
-          <span className={styles.spinner} aria-hidden="true" /> Chargement des profils…
-        </div>
+        <StateBox ariaLive="polite">
+          <Spinner /> Chargement des profils…
+        </StateBox>
       )}
 
       {status === 'error' && (
-        <div role="alert" className={styles.alertError}>
-          <strong>Impossible de charger les profils.</strong>
-          <span>{error}</span>
-          <button type="button" className={styles.retry} onClick={reload}>
-            Réessayer
-          </button>
-        </div>
+        <ErrorState title="Impossible de charger les profils." message={error} onRetry={reload} />
       )}
 
       {status === 'success' && rows.length === 0 && (
-        <div className={styles.stateBox}>
+        <StateBox>
           {filtered ? 'Aucun profil ne correspond à ces critères.' : "Aucun profil d'exposition."}
           {canWrite && !filtered && <> Créez-en un avec « Nouveau profil ».</>}
-        </div>
+        </StateBox>
       )}
 
       {status === 'success' && rows.length > 0 && (
@@ -475,9 +469,9 @@ function ThresholdsModal({
       }
     >
       {status === 'loading' && (
-        <div className={styles.stateBox} aria-live="polite">
-          <span className={styles.spinner} aria-hidden="true" /> Chargement des seuils…
-        </div>
+        <StateBox ariaLive="polite">
+          <Spinner /> Chargement des seuils…
+        </StateBox>
       )}
       {status === 'error' && (
         <div role="alert" className={styles.formError}>

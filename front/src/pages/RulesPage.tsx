@@ -17,7 +17,7 @@ import {
   type UpdateAlertRuleInput,
 } from '../api/types'
 import { useCanWrite } from '../auth/usePermissions'
-import { Badge, Button, Input } from '../components/ui'
+import { Badge, Button, ErrorState, Input, Spinner, StateBox } from '../components/ui'
 import { Modal } from '../components/Modal'
 import { useAlertRules, type RulesQuery } from '../features/rules/useAlertRules'
 import styles from './RulesPage.module.css'
@@ -244,26 +244,20 @@ export function RulesPage() {
       </div>
 
       {status === 'loading' && (
-        <div className={styles.stateBox} aria-live="polite">
-          <span className={styles.spinner} aria-hidden="true" /> Chargement des règles…
-        </div>
+        <StateBox ariaLive="polite">
+          <Spinner /> Chargement des règles…
+        </StateBox>
       )}
 
       {status === 'error' && (
-        <div role="alert" className={styles.alertError}>
-          <strong>Impossible de charger les règles.</strong>
-          <span>{error}</span>
-          <button type="button" className={styles.retry} onClick={reload}>
-            Réessayer
-          </button>
-        </div>
+        <ErrorState title="Impossible de charger les règles." message={error} onRetry={reload} />
       )}
 
       {status === 'success' && rows.length === 0 && (
-        <div className={styles.stateBox}>
+        <StateBox>
           {filtered ? 'Aucune règle ne correspond à ces critères.' : "Aucune règle d'alerte pour le moment."}
           {canWrite && !filtered && !noLocations && <> Créez-en une avec « Nouvelle règle ».</>}
-        </div>
+        </StateBox>
       )}
 
       {status === 'success' && rows.length > 0 && (
