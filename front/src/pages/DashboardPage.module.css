@@ -42,7 +42,7 @@
 
 .alertError {
   display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3);
-  background: var(--c-danger-bg); color: var(--c-danger); border: 1px solid #F5C2C7;
+  background: var(--c-danger-bg); color: var(--c-danger); border: 1px solid var(--c-danger-border);
   border-radius: var(--radius-md); padding: var(--sp-4); margin-block: var(--sp-4);
 }
 .retry { background: var(--c-accent); color: #fff; border: none; border-radius: var(--radius-sm); padding: var(--sp-2) var(--sp-3); cursor: pointer; }
