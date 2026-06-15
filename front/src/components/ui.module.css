@@ -66,6 +66,12 @@
 .input::placeholder { color: var(--c-text-muted); }
 .input:hover { border-color: var(--brand-atmosphere); }
 .input:focus-visible { outline: none; border-color: var(--c-accent); box-shadow: 0 0 0 var(--ring-width) rgba(31, 168, 184, 0.25); }
+/* Select de formulaire partagé (SelectField) — iso-rendu des anciens .select de page. */
+.select {
+  padding: var(--sp-3) var(--sp-4); border: 1px solid var(--c-border-strong);
+  border-radius: var(--radius-md); background: var(--c-bg-elevated); color: var(--c-text); font-size: var(--fs-sm);
+}
+.select:focus-visible { outline: none; border-color: var(--c-accent); box-shadow: 0 0 0 var(--ring-width) rgba(31, 168, 184, 0.25); }
 .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .invalid { border-color: var(--c-danger); }
 .hint { font-size: var(--fs-xs); color: var(--c-text-muted); }

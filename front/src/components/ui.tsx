@@ -1,4 +1,4 @@
-import { forwardRef, useId, type ButtonHTMLAttributes, type HTMLAttributes, type InputHTMLAttributes, type ReactNode } from 'react'
+import { forwardRef, useId, type ButtonHTMLAttributes, type HTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from 'react'
 import { AQI_SCALE, type AqiLevel } from './aqi'
 import styles from './ui.module.css'
 
@@ -68,6 +68,40 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
         aria-describedby={[error ? errId : '', hint ? hintId : ''].filter(Boolean).join(' ') || undefined}
         {...rest}
       />
+      {hint && !error && <p id={hintId} className={styles.hint}>{hint}</p>}
+      {error && <p id={errId} className={styles.errorText} role="alert">{error}</p>}
+    </div>
+  )
+})
+
+/* ===== SelectField (calqué sur Input — label associé via htmlFor + aria) ===== */
+interface SelectFieldProps extends SelectHTMLAttributes<HTMLSelectElement> {
+  label: string
+  error?: string
+  hint?: string
+  children: ReactNode
+}
+export const SelectField = forwardRef<HTMLSelectElement, SelectFieldProps>(function SelectField(
+  { label, error, hint, id, className = '', children, ...rest },
+  ref,
+) {
+  const autoId = useId()
+  const selectId = id ?? autoId
+  const errId = `${selectId}-err`
+  const hintId = `${selectId}-hint`
+  return (
+    <div className={styles.field}>
+      <label htmlFor={selectId} className={styles.label}>{label}</label>
+      <select
+        ref={ref}
+        id={selectId}
+        className={[styles.select, error ? styles.invalid : '', className].filter(Boolean).join(' ')}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={[error ? errId : '', hint ? hintId : ''].filter(Boolean).join(' ') || undefined}
+        {...rest}
+      >
+        {children}
+      </select>
       {hint && !error && <p id={hintId} className={styles.hint}>{hint}</p>}
       {error && <p id={errId} className={styles.errorText} role="alert">{error}</p>}
     </div>

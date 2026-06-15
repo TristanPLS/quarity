@@ -17,7 +17,7 @@ import {
   type UpdateAlertRuleInput,
 } from '../api/types'
 import { useCanWrite } from '../auth/usePermissions'
-import { Badge, Button, ErrorState, Input, Spinner, StateBox } from '../components/ui'
+import { Badge, Button, ErrorState, Input, SelectField, Spinner, StateBox } from '../components/ui'
 import { Modal } from '../components/Modal'
 import { useAlertRules, type RulesQuery } from '../features/rules/useAlertRules'
 import styles from './RulesPage.module.css'
@@ -455,23 +455,20 @@ function RuleFormModal({ mode, rule, locations, onClose, onSaved }: RuleFormProp
         )}
 
         {mode === 'create' ? (
-          <label className={styles.field}>
-            <span className={styles.fieldLabel}>Lieu suivi</span>
-            <select
-              className={styles.select}
-              value={locationId}
-              onChange={(e) => setLocationId(Number(e.target.value))}
-              required
-              autoFocus
-            >
-              {locations.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.name}
-                  {l.is_active ? '' : ' (en pause)'}
-                </option>
-              ))}
-            </select>
-          </label>
+          <SelectField
+            label="Lieu suivi"
+            value={locationId}
+            onChange={(e) => setLocationId(Number(e.target.value))}
+            required
+            autoFocus
+          >
+            {locations.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.name}
+                {l.is_active ? '' : ' (en pause)'}
+              </option>
+            ))}
+          </SelectField>
         ) : (
           <div className={styles.readonlyField}>
             <span className={styles.fieldLabel}>Lieu suivi</span>
@@ -482,16 +479,13 @@ function RuleFormModal({ mode, rule, locations, onClose, onSaved }: RuleFormProp
         )}
 
         {mode === 'create' ? (
-          <label className={styles.field}>
-            <span className={styles.fieldLabel}>Polluant</span>
-            <select className={styles.select} value={parameter} onChange={(e) => setParameter(e.target.value as Parameter)}>
-              {PARAMETERS.map((p) => (
-                <option key={p} value={p}>
-                  {paramLabel(p)}
-                </option>
-              ))}
-            </select>
-          </label>
+          <SelectField label="Polluant" value={parameter} onChange={(e) => setParameter(e.target.value as Parameter)}>
+            {PARAMETERS.map((p) => (
+              <option key={p} value={p}>
+                {paramLabel(p)}
+              </option>
+            ))}
+          </SelectField>
         ) : (
           <div className={styles.readonlyField}>
             <span className={styles.fieldLabel}>Polluant</span>
@@ -502,21 +496,18 @@ function RuleFormModal({ mode, rule, locations, onClose, onSaved }: RuleFormProp
         )}
 
         <div className={styles.row}>
-          <label className={styles.field}>
-            <span className={styles.fieldLabel}>Condition</span>
-            <select
-              className={styles.select}
-              value={comparator}
-              onChange={(e) => setComparator(e.target.value as Comparator)}
-              autoFocus={mode === 'edit'}
-            >
-              {COMPARATORS.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </label>
+          <SelectField
+            label="Condition"
+            value={comparator}
+            onChange={(e) => setComparator(e.target.value as Comparator)}
+            autoFocus={mode === 'edit'}
+          >
+            {COMPARATORS.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </SelectField>
           <Input
             label="Seuil"
             type="number"
@@ -529,25 +520,19 @@ function RuleFormModal({ mode, rule, locations, onClose, onSaved }: RuleFormProp
           />
         </div>
 
-        <label className={styles.field}>
-          <span className={styles.fieldLabel}>Sévérité</span>
-          <select className={styles.select} value={severity} onChange={(e) => setSeverity(e.target.value as Severity)}>
-            {SEVERITIES.map((s) => (
-              <option key={s} value={s}>
-                {SEVERITY_LABELS[s]}
-              </option>
-            ))}
-          </select>
-        </label>
+        <SelectField label="Sévérité" value={severity} onChange={(e) => setSeverity(e.target.value as Severity)}>
+          {SEVERITIES.map((s) => (
+            <option key={s} value={s}>
+              {SEVERITY_LABELS[s]}
+            </option>
+          ))}
+        </SelectField>
 
         {mode === 'edit' && (
-          <label className={styles.field}>
-            <span className={styles.fieldLabel}>Statut</span>
-            <select className={styles.select} value={statusValue} onChange={(e) => setStatusValue(e.target.value as RuleStatus)}>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-            </select>
-          </label>
+          <SelectField label="Statut" value={statusValue} onChange={(e) => setStatusValue(e.target.value as RuleStatus)}>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </SelectField>
         )}
 
         <Input
