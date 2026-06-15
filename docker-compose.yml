@@ -60,7 +60,9 @@ services:
 
   # --- ClickHouse 24.x — source de vérité analytics (mesures) ---
   clickhouse:
-    image: clickhouse/clickhouse-server:24.8-alpine
+    # Patch EXACT épinglé (pas le tag roulant 24.8-alpine) : reproductibilité prod = CI.
+    # Un patch 24.8.x a durci bitTest/bitShiftLeft (cf. ci.yml + back/src/exposure_dose.sql).
+    image: clickhouse/clickhouse-server:24.8.14.39-alpine
     container_name: quarity_clickhouse
     restart: unless-stopped
     environment:

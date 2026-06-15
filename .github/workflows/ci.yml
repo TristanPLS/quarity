@@ -43,7 +43,10 @@ jobs:
           --health-retries 10
 
       clickhouse:
-        image: clickhouse/clickhouse-server:24.8-alpine
+        # Patch EXACT epingle (pas le tag roulant 24.8-alpine) : un patch 24.8.x a
+        # durci bitTest/bitShiftLeft (position non-constante signee -> PARAMETER_OUT_OF_BOUND),
+        # cassant la requete de dose. Reproductibilite CI = prod (cf. docker-compose.yml).
+        image: clickhouse/clickhouse-server:24.8.14.39-alpine
         env:
           CLICKHOUSE_USER: quarity
           CLICKHOUSE_PASSWORD: quarity_ci

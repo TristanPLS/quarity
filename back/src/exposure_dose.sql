@@ -58,5 +58,10 @@ WHERE toDate(toTimeZone(hour, {tz:String})) >= {from:Date}
   AND toDate(toTimeZone(hour, {tz:String})) <= {to:Date}
   AND (toHour(toTimeZone(hour, {tz:String})) * 60 + toMinute(toTimeZone(hour, {tz:String}))) >= {start_min:UInt16}
   AND (toHour(toTimeZone(hour, {tz:String})) * 60 + toMinute(toTimeZone(hour, {tz:String}))) <  {end_min:UInt16}
-  AND bitTest({days_mask:UInt16}, toDayOfWeek(toTimeZone(hour, {tz:String}), 1) - 1) = 1
+  -- Jour actif : bit (0=Lun .. 6=Dim) du days_mask. toDayOfWeek(...,1) est DEJA
+  -- 0-based (Lun=0), donc PAS de -1 (l'ancien -1 decalait tous les jours d'un bit et
+  -- cassait le lundi). Forme bitAnd/bitShiftLeft et non bitTest : ClickHouse 24.8+
+  -- rejette bitTest et bitShiftLeft avec une position non-constante de type signe
+  -- (PARAMETER_OUT_OF_BOUND) ; ici le decalage est un UInt8 non signe (0..6).
+  AND bitAnd({days_mask:UInt16}, bitShiftLeft(toUInt16(1), toDayOfWeek(toTimeZone(hour, {tz:String}), 1))) != 0
 FORMAT JSONEachRow
