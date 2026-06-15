@@ -85,7 +85,7 @@ README, AGENTS.md, CONTRIBUTING.md, roadmap, pitch, identité, logs. *(Repo Git 
 
 ### C. Jalon 4 — Durcissement & V1
 - [x] **C1** Recette : tableau de tests fonctionnels manuels (attendu vs obtenu). — ✅ livré 2026-06-15 (`docs/recette.md` : 10 domaines, ~40 scénarios attendu/obtenu adossés aux ~170 tests back + 20 front + 18 captures ; périmètre & exclusions documentés).
-- [ ] **C2** Benchmarks perf (matching < 5 ms, timeseries < 200 ms p95) **avec hypothèses de charge** + protocole.
+- [x] **C2** Benchmarks perf (matching < 5 ms, timeseries < 200 ms p95) **avec hypothèses de charge** + protocole. — ✅ livré 2026-06-15 (`docs/benchmarks.md` + `back/benches/matching.rs` criterion) : matching **~0.3-0.6 µs/mesure** à 10k règles (marge ~10 000× sous le 5 ms), `lookup` O(1) ~38 ns ; protocole de charge p95 timeseries (`oha`/`k6`, hypothèses VUs) figé → mesure réelle sur l'env démo (7d).
 - [~] **C3** CI/CD : ✅ la CI lance désormais **Vitest** (front) en plus de fmt/clippy/tests back (vraies bases)/build/docker (2026-06-13). **Reste** : `cargo audit`/`npm audit` (supply-chain) + **ESLint** front.
 - [~] **C4** Déploiement (≥ 1 env de démo) — à faire ; **README final** ✅ étoffé 2026-06-13 (étape `JWT_SECRET`, comptes démo, périmètre exact) ; **tag `v1.0`** à poser une fois le reste mergé.
 
