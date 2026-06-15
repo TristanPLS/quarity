@@ -123,6 +123,52 @@ fn to_ch_datetime(utc: &str) -> String {
     }
 }
 
+/// Contexte d'un capteur pour normaliser ses heures (groupe les champs pour éviter une
+/// fonction à 6 paramètres — `clippy::too_many_arguments`).
+struct SensorIngestCtx<'a> {
+    location_id: u64,
+    sensor_id: u64,
+    /// Code polluant en minuscules (déjà filtré par `ALLOWED`).
+    parameter: &'a str,
+    country: &'a str,
+    latitude: f64,
+    longitude: f64,
+}
+
+/// Transforme (PUR : aucun réseau, seul stderr pour un avertissement) les heures OpenAQ v3
+/// d'un capteur en lignes ClickHouse. Une mesure sans `value`/`datetimeFrom` est ignorée ;
+/// une mesure SANS UNITÉ est ignorée ET comptée (décision D4.2, `docs/foundations.md` :
+/// pas de défaut silencieux µg/m³). Renvoie `(lignes, nb ignorées faute d'unité)`.
+fn normalize_sensor_hours(ctx: &SensorIngestCtx, hours: Vec<OaqHour>) -> (Vec<ChRow>, usize) {
+    let mut rows = Vec::new();
+    let mut skipped_no_unit = 0usize;
+    for h in hours {
+        let (Some(value), Some(dt)) = (h.value, h.period.datetime_from.as_ref()) else {
+            continue;
+        };
+        let Some(unit) = h.parameter.units else {
+            skipped_no_unit += 1;
+            eprintln!(
+                "⚠ capteur #{} ({}) : mesure du {} sans unité — ignorée (décision D4.2)",
+                ctx.sensor_id, ctx.parameter, dt.utc
+            );
+            continue;
+        };
+        rows.push(ChRow {
+            location_id: ctx.location_id,
+            sensor_id: ctx.sensor_id,
+            parameter: ctx.parameter.to_string(),
+            country: ctx.country.to_string(),
+            unit,
+            measured_at: to_ch_datetime(&dt.utc),
+            value,
+            latitude: ctx.latitude,
+            longitude: ctx.longitude,
+        });
+    }
+    (rows, skipped_no_unit)
+}
+
 /// Extrait l'en-tête `Retry-After` au format « secondes » (la forme date HTTP, rare,
 /// retombe sur le backoff exponentiel).
 fn retry_after_secs(resp: &reqwest::Response) -> Option<Duration> {
@@ -441,33 +487,24 @@ async fn run_ingest() -> Result<()> {
             s.id,
             hours.len()
         );
-        for h in hours {
-            let (Some(value), Some(dt)) = (h.value, h.period.datetime_from.as_ref()) else {
-                continue;
-            };
-            // Unités strictes (décision D4.2, docs/foundations.md) : pas de défaut silencieux
-            // µg/m³ — une mesure sans unité est ignorée et comptée.
-            let Some(unit) = h.parameter.units else {
-                skipped_no_unit += 1;
-                eprintln!(
-                    "⚠ capteur #{} ({pname}) : mesure du {} sans unité — ignorée (décision D4.2)",
-                    s.id, dt.utc
-                );
-                continue;
-            };
-            rows.push(ChRow {
+        // Normalisation (pure, testée unitairement) : value/datetime manquants ignorés ;
+        // unité manquante ignorée ET comptée (décision D4.2).
+        let (new_rows, skipped) = normalize_sensor_hours(
+            &SensorIngestCtx {
                 location_id: location_id as u64,
                 sensor_id: s.id as u64,
-                parameter: pname.clone(),
-                country: country.clone(),
-                unit,
-                measured_at: to_ch_datetime(&dt.utc),
-                value,
+                parameter: &pname,
+                country: &country,
                 latitude: coords.latitude,
                 longitude: coords.longitude,
-            });
-            *per_param.entry(pname.clone()).or_insert(0) += 1;
+            },
+            hours,
+        );
+        skipped_no_unit += skipped;
+        if !new_rows.is_empty() {
+            *per_param.entry(pname.clone()).or_insert(0) += new_rows.len();
         }
+        rows.extend(new_rows);
     }
     println!("Mesures récupérées : {} (", rows.len());
     for (p, n) in &per_param {
@@ -621,7 +658,7 @@ async fn link_org(
 // ---------- Tests unitaires (purs : aucun réseau, aucune env globale, aucun service) ----------
 #[cfg(test)]
 mod tests {
-    use super::parse_interval_secs;
+    use super::*;
 
     #[test]
     fn interval_absent_is_one_shot() {
@@ -659,5 +696,52 @@ mod tests {
                 "le message doit citer la valeur reçue : {err}"
             );
         }
+    }
+
+    #[test]
+    fn to_ch_datetime_normalizes_openaq_utc() {
+        // Sans fraction -> .000 ajoute ; T -> espace, suffixe Z retire.
+        assert_eq!(
+            to_ch_datetime("2026-05-28T02:00:00Z"),
+            "2026-05-28 02:00:00.000"
+        );
+        // Avec fraction -> conservee telle quelle.
+        assert_eq!(
+            to_ch_datetime("2026-05-28T02:00:00.500Z"),
+            "2026-05-28 02:00:00.500"
+        );
+        // Deja un espace, pas de Z -> .000 ajoute.
+        assert_eq!(
+            to_ch_datetime("2026-05-28 02:00:00"),
+            "2026-05-28 02:00:00.000"
+        );
+    }
+
+    #[test]
+    fn normalize_sensor_hours_filters_and_counts() {
+        // Fixture OpenAQ v3 /hours : 4 heures (valide, value=null, units=null, datetime=null).
+        let hours: Vec<OaqHour> =
+            serde_json::from_str(include_str!("../../tests/fixtures/openaq_hours.json"))
+                .expect("fixture openaq_hours.json valide");
+        let ctx = SensorIngestCtx {
+            location_id: 1001,
+            sensor_id: 5001,
+            parameter: "pm25",
+            country: "FR",
+            latitude: 43.7,
+            longitude: 7.26,
+        };
+        let (rows, skipped) = normalize_sensor_hours(&ctx, hours);
+        // 1 valide -> 1 row ; value=null et datetime=null ignorees SANS compteur ;
+        // units=null ignoree ET comptee (gele la decision D4.2).
+        assert_eq!(rows.len(), 1, "une seule mesure valide");
+        assert_eq!(skipped, 1, "une seule ignoree faute d'unite (D4.2)");
+        let r = &rows[0];
+        assert_eq!(r.unit, "µg/m³");
+        assert_eq!(r.measured_at, "2026-05-28 02:00:00.000");
+        assert_eq!(r.value, 12.5);
+        assert_eq!(r.parameter, "pm25");
+        assert_eq!(r.location_id, 1001);
+        assert_eq!(r.sensor_id, 5001);
     }
 }
