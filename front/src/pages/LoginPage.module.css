@@ -49,7 +49,7 @@
 .title { font-size: var(--fs-xl); }
 .error {
   background: var(--c-danger-bg); color: var(--c-danger);
-  border: 1px solid #F5C2C7; border-radius: var(--radius-md);
+  border: 1px solid var(--c-danger-border); border-radius: var(--radius-md);
   padding: var(--sp-3) var(--sp-4); font-size: var(--fs-sm); font-weight: var(--fw-medium);
 }
 .demo {

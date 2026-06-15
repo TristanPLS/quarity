@@ -92,7 +92,7 @@
   font-size: var(--fs-sm, 0.875rem);
 }
 .warning {
-  border-left-color: #f39c2e;
+  border-left-color: var(--c-warning-on-dark);
 }
 .critical {
   border-left-color: #e8574a;

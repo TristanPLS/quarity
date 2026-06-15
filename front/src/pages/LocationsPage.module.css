@@ -25,6 +25,7 @@
 }
 .seg:last-child { border-right: none; }
 .seg:hover { background: var(--c-bg-sunken); }
+.seg:focus-visible { outline: 2px solid var(--c-accent); outline-offset: -2px; }
 .segOn, .segOn:hover { background: var(--brand-atmosphere); color: var(--brand-mist); }
 
 .tableWrap { overflow-x: auto; border: 1px solid var(--c-border); border-radius: var(--radius-lg); }
@@ -41,7 +42,7 @@
 .pageInfo { font-size: var(--fs-sm); color: var(--c-text-muted); }
 
 .form { display: flex; flex-direction: column; gap: var(--sp-4); }
-.formError { background: var(--c-danger-bg); color: var(--c-danger); border: 1px solid #F5C2C7; border-radius: var(--radius-md); padding: var(--sp-3) var(--sp-4); font-size: var(--fs-sm); }
+.formError { background: var(--c-danger-bg); color: var(--c-danger); border: 1px solid var(--c-danger-border); border-radius: var(--radius-md); padding: var(--sp-3) var(--sp-4); font-size: var(--fs-sm); }
 .checkRow { display: flex; align-items: center; gap: var(--sp-3); font-size: var(--fs-sm); color: var(--c-text); }
 
 .stateBox {
@@ -51,7 +52,7 @@
 }
 .alertError {
   display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3);
-  background: var(--c-danger-bg); color: var(--c-danger); border: 1px solid #F5C2C7;
+  background: var(--c-danger-bg); color: var(--c-danger); border: 1px solid var(--c-danger-border);
   border-radius: var(--radius-md); padding: var(--sp-4);
 }
 .retry { background: var(--c-accent); color: #fff; border: none; border-radius: var(--radius-sm); padding: var(--sp-2) var(--sp-3); cursor: pointer; }

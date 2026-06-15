@@ -39,8 +39,12 @@
   --c-success-bg:    var(--brand-mint-soft);
   --c-warning:       #9A5B00;
   --c-warning-bg:    #FCEFD6;
+  /* Orange clair lisible sur fond SOMBRE (AlertsPanel) ; --c-warning #9A5B00 y serait illisible. */
+  --c-warning-on-dark: #F2A23C;
   --c-danger:        var(--brand-danger);
   --c-danger-bg:     var(--brand-danger-soft);
+  /* Bordure des encarts d'erreur sur fond clair (iso-rendu de l'ancien hex #F5C2C7). */
+  --c-danger-border: #F5C2C7;
 
   --c-focus-ring:    var(--brand-cyan);
 
