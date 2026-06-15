@@ -84,7 +84,7 @@ README, AGENTS.md, CONTRIBUTING.md, roadmap, pitch, identité, logs. *(Repo Git 
 - [ ] **B13** **RGPD** (registre, rétention des données perso ≠ TTL mesures, DPA B2G) ; matrice **RBAC** + middleware ; **journal d'audit** applicatif.
 
 ### C. Jalon 4 — Durcissement & V1
-- [ ] **C1** Recette : tableau de tests fonctionnels manuels (attendu vs obtenu).
+- [x] **C1** Recette : tableau de tests fonctionnels manuels (attendu vs obtenu). — ✅ livré 2026-06-15 (`docs/recette.md` : 10 domaines, ~40 scénarios attendu/obtenu adossés aux ~170 tests back + 20 front + 18 captures ; périmètre & exclusions documentés).
 - [ ] **C2** Benchmarks perf (matching < 5 ms, timeseries < 200 ms p95) **avec hypothèses de charge** + protocole.
 - [~] **C3** CI/CD : ✅ la CI lance désormais **Vitest** (front) en plus de fmt/clippy/tests back (vraies bases)/build/docker (2026-06-13). **Reste** : `cargo audit`/`npm audit` (supply-chain) + **ESLint** front.
 - [~] **C4** Déploiement (≥ 1 env de démo) — à faire ; **README final** ✅ étoffé 2026-06-13 (étape `JWT_SECRET`, comptes démo, périmètre exact) ; **tag `v1.0`** à poser une fois le reste mergé.
