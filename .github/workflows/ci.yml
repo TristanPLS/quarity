@@ -134,6 +134,12 @@ jobs:
           cache: npm
           cache-dependency-path: front/package-lock.json
       - run: npm ci
+      # Audit supply-chain front (advisory) — `--omit=dev` : seules les deps de PROD
+      # comptent (les vulns connues = devDeps d'outillage/test, hors bundle). Phase 1 :
+      # `continue-on-error` (signale sans bloquer la PR).
+      - name: npm audit (prod, advisory)
+        run: npm audit --omit=dev
+        continue-on-error: true
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run test:run
@@ -149,3 +155,21 @@ jobs:
         run: docker build -t quarity-back:ci ./back
       - name: Build image front
         run: docker build -t quarity-front:ci ./front
+
+  # ===========================================================================
+  # Audit supply-chain back (advisory). Job NON requis : son nom NE collisionne PAS
+  # avec les 3 required status checks (back / front / docker). Phase 1 : advisory
+  # (`continue-on-error` — un avis RUSTSEC signale sans bloquer la PR). Phase 2 :
+  # le rendre bloquant + l'ajouter aux required checks de la protection de branche.
+  supply-chain:
+    name: Supply-chain — cargo audit (advisory)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+      - name: cargo audit
+        working-directory: back
+        continue-on-error: true
+        run: cargo audit
