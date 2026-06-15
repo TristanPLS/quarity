@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { AqiBadge, aqiLevelFromValue, Badge } from './ui'
+import { AqiBadge, Badge } from './ui'
+import { aqiLevelFromValue } from './aqi'
 
 describe('aqiLevelFromValue', () => {
   it('mappe une valeur AQI sur le bon palier US EPA', () => {

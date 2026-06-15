@@ -10,7 +10,7 @@ import {
   YAxis,
   type TooltipProps,
 } from 'recharts'
-import { ApiError, PARAMETERS, type Parameter } from '../api/types'
+import { ApiError, PARAMETERS, paramLabel, type Parameter } from '../api/types'
 import { formatFull, formatTick } from '../lib/datetime'
 import { useMeasurements, type ChartPoint, type MeasurementQuery } from '../features/measurements/useMeasurements'
 import { Button } from '../components/ui'
@@ -21,15 +21,6 @@ import styles from './DashboardPage.module.css'
 const BRAND_LINE = '#1FA8B8' // Cyan respiration — accent de DONNÉE (jamais AQI)
 const BRAND_GRID = '#CFE8F5'
 const BRAND_AXIS = '#13242E'
-
-const PARAM_LABELS: Record<Parameter, string> = {
-  pm25: 'PM2.5',
-  pm10: 'PM10',
-  no2: 'NO₂',
-  o3: 'O₃',
-  so2: 'SO₂',
-  co: 'CO',
-}
 
 function CustomTooltip({ active, payload }: TooltipProps<number, string>) {
   if (!active || !payload?.length) return null
@@ -116,7 +107,7 @@ export function DashboardPage() {
             >
               {PARAMETERS.map((p) => (
                 <option key={p} value={p}>
-                  {PARAM_LABELS[p]}
+                  {paramLabel(p)}
                 </option>
               ))}
             </select>
@@ -167,7 +158,7 @@ export function DashboardPage() {
           <>
             <figure className={styles.chartCard}>
               <figcaption className={styles.chartCap}>
-                {PARAM_LABELS[form.parameter]} — station <span className={styles.mono}>{form.location_id}</span>
+                {paramLabel(form.parameter)} — station <span className={styles.mono}>{form.location_id}</span>
                 {unit && <> ({unit})</>}
               </figcaption>
               <ResponsiveContainer width="100%" height={360}>
@@ -194,7 +185,7 @@ export function DashboardPage() {
                     dot={false}
                     activeDot={{ r: 4, fill: BRAND_LINE }}
                     isAnimationActive={false}
-                    name={PARAM_LABELS[form.parameter]}
+                    name={paramLabel(form.parameter)}
                   />
                 </LineChart>
               </ResponsiveContainer>
@@ -203,7 +194,7 @@ export function DashboardPage() {
             <div className={styles.tableWrap}>
               <table className={styles.table}>
                 <caption className="sr-only">
-                  Points de mesure {PARAM_LABELS[form.parameter]} pour la station {form.location_id}
+                  Points de mesure {paramLabel(form.parameter)} pour la station {form.location_id}
                 </caption>
                 <thead>
                   <tr>

@@ -5,15 +5,7 @@ let accessToken: string | null = null
 
 export const tokenStore = {
   getAccess: (): string | null => accessToken,
-  setAccess: (t: string | null): void => {
-    accessToken = t
-  },
-
   getRefresh: (): string | null => localStorage.getItem(REFRESH_KEY),
-  setRefresh: (t: string | null): void => {
-    if (t) localStorage.setItem(REFRESH_KEY, t)
-    else localStorage.removeItem(REFRESH_KEY)
-  },
 
   setTokens: (tr: { access_token: string; refresh_token: string }): void => {
     accessToken = tr.access_token

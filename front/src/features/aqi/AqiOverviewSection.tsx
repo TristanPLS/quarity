@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
-import { AqiBadge, aqiLevelFromValue, Badge } from '../../components/ui'
+import { AqiBadge, Badge } from '../../components/ui'
+import { aqiLevelFromValue } from '../../components/aqi'
 import { paramLabel, type LocationAqi } from '../../api/types'
 import { useAqiOverview } from './useAqiOverview'
 import { AqiMap } from './AqiMap'
