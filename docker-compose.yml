@@ -23,12 +23,18 @@ services:
     image: postgres:16-alpine
     container_name: quarity_postgres
     restart: unless-stopped
+    # Limite memoire (dev/demo) - evite qu'un service affame l'hote. Honore par compose v2.
+    deploy:
+      resources:
+        limits:
+          memory: 1g
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      # Loopback : acces hote dev-only ; l'inter-service passe par le reseau compose.
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       # plus d'initdb.d : le schéma vient des migrations sqlx du back (back/migrations/)
       - pgdata:/var/lib/postgresql/data
@@ -65,13 +71,20 @@ services:
     image: clickhouse/clickhouse-server:24.8.14.39-alpine
     container_name: quarity_clickhouse
     restart: unless-stopped
+    # Limite memoire (dev/demo). ClickHouse 24.8 lit la limite cgroup du conteneur et se
+    # borne via max_server_memory_usage_to_ram_ratio (0.9) -> couplage automatique.
+    deploy:
+      resources:
+        limits:
+          memory: 4g
     environment:
       CLICKHOUSE_USER: ${CLICKHOUSE_USER}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
       CLICKHOUSE_DB: ${CLICKHOUSE_DB}
     ports:
-      - "${CLICKHOUSE_HTTP_PORT:-8123}:8123"     # interface HTTP
-      - "${CLICKHOUSE_NATIVE_PORT:-9000}:9000"   # protocole natif (driver)
+      # Loopback : acces hote dev-only (l'inter-service passe par le reseau compose).
+      - "127.0.0.1:${CLICKHOUSE_HTTP_PORT:-8123}:8123"     # interface HTTP
+      - "127.0.0.1:${CLICKHOUSE_NATIVE_PORT:-9000}:9000"   # protocole natif (driver)
     ulimits:
       nofile:
         soft: 262144
@@ -92,11 +105,18 @@ services:
     image: redis:7-alpine
     container_name: quarity_redis
     restart: unless-stopped
+    # Limite memoire (dev/demo). PAS de politique d'eviction : Redis porte refresh-tokens,
+    # compteurs de rate-limit et sessions ; --appendonly persiste (restart = reload AOF).
+    deploy:
+      resources:
+        limits:
+          memory: 512m
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD}   # exposé au conteneur pour que le healthcheck puisse l'utiliser
     command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}", "--appendonly", "yes"]
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      # Loopback : acces hote dev-only.
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     healthcheck:
