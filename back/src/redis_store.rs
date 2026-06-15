@@ -75,18 +75,25 @@ pub async fn delete_refresh(conn: &mut ConnectionManager, token: &str) -> redis:
     Ok(())
 }
 
-/// Rate-limit « fenêtre fixe » : INCR + EXPIRE à la première incrémentation.
+/// Rate-limit « fenêtre fixe » : INCR + EXPIRE en UNE opération atomique (script Lua).
 /// Renvoie le compteur courant de la fenêtre ; l'appelant compare à sa limite.
-/// Simple et suffisant ici (légère tolérance au bord de fenêtre, pas de dépendance en plus).
+///
+/// Atomique + auto-guérison : le `INCR` puis `EXPIRE` en deux allers-retours laissait,
+/// si le process crashait entre les deux, un compteur ORPHELIN sans TTL → lockout
+/// permanent de la clé. Ici le script ré-arme l'expiration dès que la clé n'a pas de TTL
+/// (`TTL < 0` : -1 = pas d'expiration), donc même une clé jadis orpheline se répare à la
+/// frappe suivante. Les scripts Lua s'exécutent atomiquement côté Redis.
 pub async fn rate_limit_hit(
     conn: &mut ConnectionManager,
     key: &str,
     window_secs: i64,
 ) -> redis::RedisResult<u64> {
-    let count: u64 = conn.incr(key, 1i64).await?;
-    if count == 1 {
-        // Première frappe de la fenêtre → on arme l'expiration du compteur.
-        conn.expire::<_, ()>(key, window_secs).await?;
-    }
-    Ok(count)
+    let script = redis::Script::new(
+        r"local n = redis.call('INCR', KEYS[1])
+if redis.call('TTL', KEYS[1]) < 0 then
+  redis.call('EXPIRE', KEYS[1], ARGV[1])
+end
+return n",
+    );
+    script.key(key).arg(window_secs).invoke_async(conn).await
 }
