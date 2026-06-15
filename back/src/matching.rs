@@ -38,6 +38,7 @@
 //!   avec les profils d'exposition (B9).
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration as StdDuration;
 
@@ -231,25 +232,65 @@ pub async fn load_rule_index_for_rule(
 pub struct RuleCache {
     cache: moka::future::Cache<(), Arc<RuleIndex>>,
     pg: PgPool,
+    // Observabilité (5a), pas d'endpoint : `accesses` = appels à `index()` ;
+    // `misses` = rechargements (le closure ne tourne qu'au miss/TTL expiré) ;
+    // `evictions` = expirations TTL (listener Moka). hit_rate ≈ 1 - misses/accesses.
+    accesses: Arc<AtomicU64>,
+    misses: Arc<AtomicU64>,
+    evictions: Arc<AtomicU64>,
+}
+
+/// Instantané des compteurs d'observabilité du cache de règles (5a).
+#[derive(Debug, Clone, Copy)]
+pub struct CacheStats {
+    pub accesses: u64,
+    pub misses: u64,
+    pub evictions: u64,
 }
 
 impl RuleCache {
     pub fn new(pg: PgPool, ttl: StdDuration) -> Self {
+        let evictions = Arc::new(AtomicU64::new(0));
+        let ev = evictions.clone();
         let cache = moka::future::Cache::builder()
             .max_capacity(1)
             .time_to_live(ttl)
+            .async_eviction_listener(move |_key, _value, _cause| {
+                ev.fetch_add(1, Ordering::Relaxed);
+                Box::pin(async {})
+            })
             .build();
-        Self { cache, pg }
+        Self {
+            cache,
+            pg,
+            accesses: Arc::new(AtomicU64::new(0)),
+            misses: Arc::new(AtomicU64::new(0)),
+            evictions,
+        }
     }
 
     /// L'index courant (rechargé si TTL expiré). Une erreur SQL n'est PAS mise
     /// en cache : le prochain appel retente.
     pub async fn index(&self) -> anyhow::Result<Arc<RuleIndex>> {
+        self.accesses.fetch_add(1, Ordering::Relaxed);
         let pg = self.pg.clone();
+        let misses = self.misses.clone();
         self.cache
-            .try_get_with((), async move { load_rule_index(&pg).await.map(Arc::new) })
+            .try_get_with((), async move {
+                misses.fetch_add(1, Ordering::Relaxed);
+                load_rule_index(&pg).await.map(Arc::new)
+            })
             .await
             .map_err(|e: Arc<sqlx::Error>| anyhow::anyhow!("chargement des règles : {e}"))
+    }
+
+    /// Instantané des compteurs d'observabilité (tracé périodiquement par `run_loop`).
+    pub fn stats(&self) -> CacheStats {
+        CacheStats {
+            accesses: self.accesses.load(Ordering::Relaxed),
+            misses: self.misses.load(Ordering::Relaxed),
+            evictions: self.evictions.load(Ordering::Relaxed),
+        }
     }
 }
 
@@ -547,6 +588,14 @@ pub async fn run_loop(state: AppState) {
                 continue;
             }
         };
+        // Observabilité (5a) : compteurs du cache de règles, gated debug (pas d'endpoint).
+        let s = cache.stats();
+        tracing::debug!(
+            accesses = s.accesses,
+            misses = s.misses,
+            evictions = s.evictions,
+            "matching : stats cache de regles"
+        );
         if index.is_empty() {
             tracing::debug!("matching : aucune règle évaluable — curseur avancé");
             watermark = Utc::now();
