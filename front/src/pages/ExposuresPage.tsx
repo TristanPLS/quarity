@@ -15,7 +15,7 @@ import {
   type UpdateTlpInput,
 } from '../api/types'
 import { useCanWrite } from '../auth/usePermissions'
-import { Badge, Button, ErrorState, Input, Spinner, StateBox } from '../components/ui'
+import { Badge, Button, ErrorState, Input, SelectField, Spinner, StateBox } from '../components/ui'
 import { Modal } from '../components/Modal'
 import { useTrackedLocationProfiles, type ExposuresQuery } from '../features/exposures/useTrackedLocationProfiles'
 import styles from './ExposuresPage.module.css'
@@ -405,16 +405,13 @@ function TlpFormModal({ mode, tlp, locations, profiles, onClose, onSaved }: Form
         )}
 
         {mode === 'create' ? (
-          <label className={styles.field}>
-            <span className={styles.fieldLabel}>Lieu suivi</span>
-            <select className={styles.select} value={locationId} onChange={(e) => setLocationId(Number(e.target.value))} required autoFocus>
-              {locations.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          <SelectField label="Lieu suivi" value={locationId} onChange={(e) => setLocationId(Number(e.target.value))} required autoFocus>
+            {locations.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.name}
+              </option>
+            ))}
+          </SelectField>
         ) : (
           <div className={styles.readonlyField}>
             <span className={styles.fieldLabel}>Lieu suivi</span>
@@ -425,16 +422,13 @@ function TlpFormModal({ mode, tlp, locations, profiles, onClose, onSaved }: Form
         )}
 
         {mode === 'create' ? (
-          <label className={styles.field}>
-            <span className={styles.fieldLabel}>Profil d'exposition</span>
-            <select className={styles.select} value={profileId} onChange={(e) => setProfileId(Number(e.target.value))} required>
-              {profiles.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          <SelectField label="Profil d'exposition" value={profileId} onChange={(e) => setProfileId(Number(e.target.value))} required>
+            {profiles.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </SelectField>
         ) : (
           <div className={styles.readonlyField}>
             <span className={styles.fieldLabel}>Profil d'exposition</span>
@@ -473,16 +467,13 @@ function TlpFormModal({ mode, tlp, locations, profiles, onClose, onSaved }: Form
           </div>
         </fieldset>
 
-        <label className={styles.field}>
-          <span className={styles.fieldLabel}>Fuseau horaire</span>
-          <select className={styles.select} value={timezone} onChange={(e) => setTimezone(e.target.value)}>
-            {COMMON_TIMEZONES.map((tz) => (
-              <option key={tz} value={tz}>
-                {tz}
-              </option>
-            ))}
-          </select>
-        </label>
+        <SelectField label="Fuseau horaire" value={timezone} onChange={(e) => setTimezone(e.target.value)}>
+          {COMMON_TIMEZONES.map((tz) => (
+            <option key={tz} value={tz}>
+              {tz}
+            </option>
+          ))}
+        </SelectField>
 
         <label className={styles.checkRow}>
           <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />

@@ -46,11 +46,7 @@
 .formError { background: var(--c-danger-bg); color: var(--c-danger); border: 1px solid var(--c-danger); border-radius: var(--radius-md); padding: var(--sp-3) var(--sp-4); font-size: var(--fs-sm); }
 .field { display: flex; flex-direction: column; gap: var(--sp-2); }
 .fieldLabel { font-size: var(--fs-sm); font-weight: var(--fw-medium); color: var(--c-text); }
-.select {
-  padding: var(--sp-3) var(--sp-4); border: 1px solid var(--c-border-strong);
-  border-radius: var(--radius-md); background: var(--c-bg-elevated); color: var(--c-text); font-size: var(--fs-sm);
-}
-.select:focus-visible { outline: none; border-color: var(--c-accent); box-shadow: 0 0 0 var(--ring-width) rgba(31, 168, 184, 0.25); }
+/* .select factorisé dans components/ui (SelectField) — plus de select de page ici (2d). */
 .readonlyField { display: flex; flex-direction: column; gap: var(--sp-2); }
 .readonlyValue { font-size: var(--fs-sm); color: var(--c-text-muted); }
 .readonlyValue em { font-style: normal; font-size: var(--fs-xs); }

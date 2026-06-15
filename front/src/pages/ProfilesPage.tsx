@@ -17,7 +17,7 @@ import {
   type UpdateExposureProfileInput,
 } from '../api/types'
 import { useCanWrite } from '../auth/usePermissions'
-import { Badge, Button, ErrorState, Input, Spinner, StateBox } from '../components/ui'
+import { Badge, Button, ErrorState, Input, SelectField, Spinner, StateBox } from '../components/ui'
 import { Modal } from '../components/Modal'
 import { useExposureProfiles, type ProfilesQuery } from '../features/profiles/useExposureProfiles'
 import styles from './ProfilesPage.module.css'
@@ -292,16 +292,13 @@ function ProfileFormModal({ mode, profile, onClose, onSaved }: FormModalProps) {
           </div>
         )}
         {mode === 'create' ? (
-          <label className={styles.field}>
-            <span className={styles.fieldLabel}>Population cible</span>
-            <select className={styles.select} value={code} onChange={(e) => setCode(e.target.value as ExposureCode)} autoFocus>
-              {EXPOSURE_CODES.map((c) => (
-                <option key={c} value={c}>
-                  {exposureCodeLabel(c)}
-                </option>
-              ))}
-            </select>
-          </label>
+          <SelectField label="Population cible" value={code} onChange={(e) => setCode(e.target.value as ExposureCode)} autoFocus>
+            {EXPOSURE_CODES.map((c) => (
+              <option key={c} value={c}>
+                {exposureCodeLabel(c)}
+              </option>
+            ))}
+          </SelectField>
         ) : (
           <div className={styles.readonlyField}>
             <span className={styles.fieldLabel}>Population cible</span>
@@ -531,21 +528,18 @@ function ThresholdsModal({
                 </div>
               )}
               <div className={styles.thrFormRow}>
-                <label className={styles.field}>
-                  <span className={styles.fieldLabel}>Polluant</span>
-                  <select
-                    className={styles.select}
-                    value={parameter}
-                    onChange={(e) => setParameter(e.target.value as Parameter)}
-                    disabled={adding}
-                  >
-                    {PARAMETERS.map((p) => (
-                      <option key={p} value={p}>
-                        {paramLabel(p)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <SelectField
+                  label="Polluant"
+                  value={parameter}
+                  onChange={(e) => setParameter(e.target.value as Parameter)}
+                  disabled={adding}
+                >
+                  {PARAMETERS.map((p) => (
+                    <option key={p} value={p}>
+                      {paramLabel(p)}
+                    </option>
+                  ))}
+                </SelectField>
                 <Input
                   label="Seuil"
                   type="number"
@@ -556,21 +550,18 @@ function ThresholdsModal({
                   onChange={(e) => setThreshold(e.target.value)}
                   disabled={adding}
                 />
-                <label className={styles.field}>
-                  <span className={styles.fieldLabel}>Période</span>
-                  <select
-                    className={styles.select}
-                    value={averaging}
-                    onChange={(e) => setAveraging(e.target.value as AveragingPeriod)}
-                    disabled={adding}
-                  >
-                    {AVERAGING_PERIODS.map((a) => (
-                      <option key={a} value={a}>
-                        {AVERAGING_PERIOD_LABELS[a]}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <SelectField
+                  label="Période"
+                  value={averaging}
+                  onChange={(e) => setAveraging(e.target.value as AveragingPeriod)}
+                  disabled={adding}
+                >
+                  {AVERAGING_PERIODS.map((a) => (
+                    <option key={a} value={a}>
+                      {AVERAGING_PERIOD_LABELS[a]}
+                    </option>
+                  ))}
+                </SelectField>
                 <Button type="submit" loading={adding}>
                   Ajouter
                 </Button>

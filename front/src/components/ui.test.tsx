@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
-import { AqiBadge, Badge, ErrorState, Spinner, StateBox } from './ui'
+import { AqiBadge, Badge, ErrorState, SelectField, Spinner, StateBox } from './ui'
 import { aqiLevelFromValue } from './aqi'
 
 describe('aqiLevelFromValue', () => {
@@ -64,5 +64,19 @@ describe('ErrorState', () => {
   it('sans onRetry : aucun bouton', () => {
     render(<ErrorState title="Oups" />)
     expect(screen.queryByRole('button')).toBeNull()
+  })
+})
+
+describe('SelectField', () => {
+  it('associe le label au select via htmlFor et rend les options', () => {
+    render(
+      <SelectField label="Polluant" defaultValue="pm25">
+        <option value="pm25">PM2.5</option>
+        <option value="no2">NO2</option>
+      </SelectField>,
+    )
+    const select = screen.getByLabelText('Polluant')
+    expect(select.tagName).toBe('SELECT')
+    expect((select as HTMLSelectElement).value).toBe('pm25')
   })
 })
