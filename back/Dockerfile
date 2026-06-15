@@ -5,6 +5,10 @@ COPY Cargo.toml Cargo.lock* ./
 COPY src ./src
 # migrations/ est lu À LA COMPILATION par la macro sqlx::migrate! (main.rs)
 COPY migrations ./migrations
+# benches/ : Cargo.toml declare [[bench]] matching -> cargo VALIDE l'existence du
+# fichier au parse du manifeste, meme pour `cargo build --release` (qui ne le COMPILE
+# pas). Sans cette copie, le build Docker echoue (« can't find `matching` bench »).
+COPY benches ./benches
 RUN cargo build --release
 
 # ---- runtime ----

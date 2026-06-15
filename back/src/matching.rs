@@ -158,6 +158,27 @@ impl RuleIndex {
         }
     }
 
+    /// Construit un index à partir de règles DÉJÀ compilées — exposé pour les
+    /// benchmarks (`benches/matching.rs`, crate externe : doit être `pub`). Le chemin
+    /// de production passe par `from_rows` (chargement Postgres).
+    #[doc(hidden)]
+    pub fn from_station_rules(rules: Vec<StationRule>) -> Self {
+        let mut map: HashMap<(i64, String), Vec<StationRule>> = HashMap::new();
+        let mut rule_ids: Vec<i64> = Vec::new();
+        for r in rules {
+            rule_ids.push(r.rule_id);
+            map.entry((r.openaq_location_id, r.parameter.clone()))
+                .or_default()
+                .push(r);
+        }
+        rule_ids.sort_unstable();
+        rule_ids.dedup();
+        RuleIndex {
+            map,
+            rule_count: rule_ids.len(),
+        }
+    }
+
     /// Lookup du hot path — O(1), zéro E/S.
     pub fn lookup(&self, openaq_location_id: i64, parameter: &str) -> &[StationRule] {
         self.map

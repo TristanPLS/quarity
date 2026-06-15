@@ -64,6 +64,11 @@ thiserror          = "1"
 # Client WebSocket des tests e2e B8 (tests/b8_alerts.rs) — `connect` seul (ws:// sans TLS).
 [dev-dependencies]
 tokio-tungstenite = { version = "0.24", default-features = false, features = ["connect"] }
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "matching"
+harness = false
 
 [profile.release]
 strip = true
