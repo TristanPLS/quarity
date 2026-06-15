@@ -836,6 +836,30 @@ async fn measurements_out_of_range_page_is_bad_request() {
     assert_eq!(body["error"], "bad_request");
 }
 
+/// `page_size` hors borne (1..=1000) est rejeté en 400 (validation) au lieu d'un clamp
+/// SILENCIEUX à 1000 — cohérence avec les listings CRUD (`listing.rs`). Le `.clamp()` aval
+/// reste un filet de défense en profondeur.
+#[tokio::test]
+async fn measurements_out_of_range_page_size_is_bad_request() {
+    let base = spawn_app().await;
+    let token = access_token(&base, "sophie@agglo-riviera.fr").await;
+    let res = reqwest::Client::new()
+        .get(format!(
+            "{base}/api/measurements?location_id=1001&parameter=pm25&from=2026-04-01&to=2026-07-01&page_size=5000"
+        ))
+        .bearer_auth(token)
+        .send()
+        .await
+        .expect("requête measurements");
+    assert_eq!(
+        res.status().as_u16(),
+        400,
+        "un page_size hors borne (1..=1000) doit donner 400, pas un clamp silencieux"
+    );
+    let body = res.json::<Value>().await.expect("corps 400");
+    assert_eq!(body["error"], "bad_request");
+}
+
 /// La borne de corps serrée sur `/auth` (8 Kio) rejette un payload démesuré AVANT
 /// désérialisation (413), rendant explicite la protection anti-DoS plutôt que de
 /// s'appuyer sur la limite axum implicite de 2 Mio.

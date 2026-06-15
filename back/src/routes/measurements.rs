@@ -34,7 +34,8 @@ pub struct MeasurementsQuery {
     /// Page 1-indexée (défaut : 1 ; max 1 000 000 — borne anti-débordement de l'offset).
     #[validate(range(min = 1, max = 1000000, message = "page attendue 1..=1000000"))]
     pub page: Option<u32>,
-    /// Taille de page, clampée à 1..=1000 (défaut : 100).
+    /// Taille de page (défaut : 100 ; 1..=1000). Le `.clamp()` aval reste un filet.
+    #[validate(range(min = 1, max = 1000, message = "page_size attendue 1..=1000"))]
     pub page_size: Option<u32>,
 }
 
@@ -60,7 +61,7 @@ fn validate_date_range(q: &MeasurementsQuery) -> Result<(), validator::Validatio
     security(("bearer_jwt" = [])),
     responses(
         (status = 200, description = "Page de mesures (tri `measured_at` décroissant)", body = crate::openapi::MeasurementsPage),
-        (status = 400, description = "`parameter` hors allowlist, dates `from`/`to` invalides ou `from` > `to` (corps `ErrorBody`) — ou paramètre de requête obligatoire manquant/mal typé (rejet de l'extracteur `Query`, corps texte)", body = crate::openapi::ErrorBody),
+        (status = 400, description = "`parameter` hors allowlist, `page`/`page_size` hors borne, dates `from`/`to` invalides ou `from` > `to` (corps `ErrorBody`) — ou paramètre de requête obligatoire manquant/mal typé (rejet de l'extracteur `Query`, corps texte)", body = crate::openapi::ErrorBody),
         (status = 401, description = "Bearer manquant, invalide ou expiré", body = crate::openapi::ErrorBody),
         (status = 403, description = "Station non suivie par l'org du JWT (`location_not_in_org`) — isolation multi-tenant", body = crate::openapi::ErrorBody),
     )
