@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { CircleMarker, MapContainer, Popup, TileLayer } from 'react-leaflet'
 import type { LatLngBoundsExpression } from 'leaflet'
-import { AQI_SCALE, aqiLevelFromValue, type AqiLevel } from '../../components/ui'
+import { AQI_SCALE, aqiLevelFromValue, type AqiLevel } from '../../components/aqi'
 import { paramLabel, type LocationAqi } from '../../api/types'
 import 'leaflet/dist/leaflet.css'
 import styles from './AqiMap.module.css'

@@ -1,4 +1,5 @@
 import { forwardRef, useId, type ButtonHTMLAttributes, type HTMLAttributes, type InputHTMLAttributes, type ReactNode } from 'react'
+import { AQI_SCALE, type AqiLevel } from './aqi'
 import styles from './ui.module.css'
 
 /* ===== Button ===== */
@@ -84,24 +85,7 @@ export function Badge({ tone = 'neutral', dot, children }: { tone?: BadgeTone; d
   )
 }
 
-/* ===== AqiBadge (échelle EPA — couleur JAMAIS seule) ===== */
-export type AqiLevel = 1 | 2 | 3 | 4 | 5 | 6
-export const AQI_SCALE: Record<AqiLevel, { label: string; range: string }> = {
-  1: { label: 'Bon', range: '0–50' },
-  2: { label: 'Modéré', range: '51–100' },
-  3: { label: 'Mauvais pour groupes sensibles', range: '101–150' },
-  4: { label: 'Mauvais', range: '151–200' },
-  5: { label: 'Très mauvais', range: '201–300' },
-  6: { label: 'Dangereux', range: '301+' },
-}
-export function aqiLevelFromValue(aqi: number): AqiLevel {
-  if (aqi <= 50) return 1
-  if (aqi <= 100) return 2
-  if (aqi <= 150) return 3
-  if (aqi <= 200) return 4
-  if (aqi <= 300) return 5
-  return 6
-}
+/* ===== AqiBadge (échelle EPA — couleur JAMAIS seule ; barème dans ./aqi) ===== */
 export function AqiBadge({ level, value, unit, size = 'md' }: { level: AqiLevel; value: number | string; unit?: string; size?: 'sm' | 'md' }) {
   const info = AQI_SCALE[level]
   return (
