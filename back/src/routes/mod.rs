@@ -1,5 +1,6 @@
 //! Assemblage du routeur + couches transverses.
 
+pub mod alert_events;
 pub mod alert_rules;
 pub mod api_keys;
 pub mod aqi;
@@ -79,6 +80,8 @@ pub fn build_router(state: AppState) -> Router {
         )
         // Force-check B7 : réévaluation immédiate d'une règle (hot path matching).
         .route("/api/alert-rules/{id}/run", post(alert_rules::run))
+        // Historique des alertes (4b) : backfill du panneau temps réel B11a (read-only).
+        .route("/api/alert-events", get(alert_events::list))
         // Profils d'exposition (B9a) + leurs seuils adaptés (sous-ressource).
         .route(
             "/api/exposure-profiles",

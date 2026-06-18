@@ -1,5 +1,6 @@
 import {
   ApiError,
+  type AlertEvent,
   type AlertRule,
   type AlertRuleFilters,
   type AqiOverview,
@@ -151,6 +152,13 @@ export const api = {
 
   // AQI courant des lieux suivis de l'org (B10).
   aqiOverview: () => request<AqiOverview>('/api/aqi', { method: 'GET' }),
+
+  // --- Alertes : historique pour le backfill du panneau temps réel (4b) ---
+  alertEvents: {
+    /** Les `limit` alertes les plus récentes de l'org (`fired_at` décroissant). */
+    list: (limit = 50) =>
+      request<Page<AlertEvent>>(`/api/alert-events${buildQuery({ page_size: limit })}`, { method: 'GET' }),
+  },
 
   // --- Lieux suivis : CRUD (B6, consommé en B11b) ---
   trackedLocations: {

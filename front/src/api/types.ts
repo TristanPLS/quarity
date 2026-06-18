@@ -86,14 +86,22 @@ export interface AqiOverview {
 }
 
 // --- Alertes temps réel (B8/B8b → consommées en B11a via WebSocket /api/ws) ---
-/** Événement d'alerte poussé sur la WebSocket (miroir de `InsertedEvent` côté back). */
+/**
+ * Événement d'alerte. Deux origines, MÊME forme (dédupliquées par `id`) :
+ * - le push WebSocket B8 (miroir de `InsertedEvent` : FK toujours renseignées) ;
+ * - le backfill `GET /api/alert-events` (4b) : les FK historisées peuvent être
+ *   `null` (référent supprimé → `ON DELETE SET NULL`), d'où `number | null`.
+ */
 export interface AlertEvent {
   id: number
-  alert_rule_id: number
+  /** `null` si la règle déclenchante a été supprimée depuis (backfill). */
+  alert_rule_id: number | null
   org_id: number
-  tracked_location_id: number
+  /** `null` si le lieu suivi a été supprimé depuis (backfill). */
+  tracked_location_id: number | null
   openaq_location_id: number
-  openaq_sensor_id: number
+  /** `null` si le capteur n'a pas été renseigné (backfill). */
+  openaq_sensor_id: number | null
   parameter_code: string
   measured_value: number
   unit: string

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
+import { api } from '../../api/client'
 import { tokenStore } from '../../api/tokenStore'
 import type { AlertEvent, AlertMessage } from '../../api/types'
+import { mergeAlerts } from './mergeAlerts'
 
 export type WsStatus = 'connecting' | 'open' | 'closed'
 
@@ -62,7 +64,8 @@ export function useAlertsSocket() {
         try {
           const msg = JSON.parse(String(ev.data)) as AlertMessage
           if (msg.type === 'alert' && msg.event) {
-            setAlerts((prev) => [msg.event, ...prev].slice(0, MAX_ALERTS))
+            // Fusion par id : un event déjà présent (backfill) n'est pas dupliqué.
+            setAlerts((prev) => mergeAlerts(prev, [msg.event], MAX_ALERTS))
           }
         } catch {
           // Charge utile illisible — ignorée (jamais de crash sur un message inattendu).
@@ -85,6 +88,24 @@ export function useAlertsSocket() {
       if (timerRef.current) clearTimeout(timerRef.current)
       socketRef.current?.close()
       socketRef.current = null
+    }
+  }, [])
+
+  // Backfill au montage (4b) : charge les dernières alertes via `GET /api/alert-events`
+  // pour que le panneau ne soit pas vide au hard-refresh (limite assumée de B11a).
+  // Fusion par id avec le flux WS (mergeAlerts) → un push arrivé avant la réponse du
+  // backfill n'est pas écrasé. Échec silencieux : le live reste la source de vérité,
+  // l'historique n'est qu'un confort (jamais d'erreur affichée pour ça).
+  useEffect(() => {
+    let cancelled = false
+    api.alertEvents
+      .list(MAX_ALERTS)
+      .then((page) => {
+        if (!cancelled) setAlerts((prev) => mergeAlerts(prev, page.data, MAX_ALERTS))
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
     }
   }, [])
 
