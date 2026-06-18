@@ -43,11 +43,36 @@ docker compose --profile seed run --rm seed     # jeu de démo (orgs, lieux, rè
 
 Après le seed (mot de passe commun de démo `Quarity2026!`) :
 
-| Compte | Rôle | Organisation |
-|---|---|---|
-| `sophie@agglo-riviera.fr` | admin | Agglo Riviera (org A) |
+| Compte | Rôle | Organisation | Droits |
+|---|---|---|---|
+| `sophie@agglo-riviera.fr` | admin | Agglo Riviera (org A) | CRUD complet + gestion de l'organisation et des membres |
+| `karim@agglo-riviera.fr` | gestionnaire | Agglo Riviera (org A) | CRUD complet (lieux, règles, profils, expositions) |
+| `lecteur@agglo-riviera.fr` | lecteur | Agglo Riviera (org A) | **lecture seule** (toute mutation → `403 read_only_role`) |
+
+> Deux autres organisations sont seedées pour démontrer l'**isolation multi-tenant** : `lea@cityair.app` (admin, CityAir) et `thomas@groupeindus.com` (admin, GroupeIndus) — même mot de passe.
 
 Station réelle ingérable : `location_id=4085` (NICE PROMENADE) — `docker compose --profile ingest run --rm ingest 4085`.
+
+## Configuration (`.env`)
+
+Toutes les variables sont dans [`.env.example`](.env.example) (commentées, avec leurs défauts). Les essentielles :
+
+| Variable | Rôle | Défaut |
+|---|---|---|
+| `JWT_SECRET` | **Obligatoire** — secret de signature JWT, ≥ 32 caractères aléatoires. Le back **refuse de démarrer** avec le placeholder. Générer : `openssl rand -hex 32` | — |
+| `OPENAQ_API_KEY` | Clé OpenAQ (gratuite, https://openaq.org/) pour l'ingestion des mesures | — |
+| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | Identifiants PostgreSQL (OLTP métier) | `quarity` / — / `quarity` |
+| `CLICKHOUSE_USER` / `CLICKHOUSE_PASSWORD` / `CLICKHOUSE_DB` | Identifiants ClickHouse (analytics mesures) | `quarity` / — / `quarity` |
+| `REDIS_PASSWORD` | Mot de passe Redis (cache L2 + pub/sub) | — |
+| `JWT_ACCESS_TTL_SECONDS` / `REFRESH_TTL_SECS` | Durées de vie des jetons d'accès / de refresh (secondes) | `900` / `604800` |
+| `RATE_LIMIT_LOGIN_EMAIL_PER_MIN` / `RATE_LIMIT_LOGIN_IP_PER_MIN` | Anti-brute-force du login (par email / par IP) | `5` / `20` |
+| `CORS_ALLOWED_ORIGINS` | Origines front autorisées (séparées par des virgules) | `http://localhost:3000` |
+| `BACK_PORT` / `FRONT_PORT` | Ports hôte du back / du front | `8080` / `3000` |
+| `POSTGRES_PORT` / `CLICKHOUSE_HTTP_PORT` / `CLICKHOUSE_NATIVE_PORT` / `REDIS_PORT` | Ports hôte des bases (bindés en loopback, dev) | `5432` / `8123` / `9000` / `6379` |
+| `MATCHING_INTERVAL_SECS` | Cadence de la boucle de matching B7 (`0` = désactivée) | `300` |
+| `INGEST_INTERVAL_SECS` / `INGEST_SCHEDULER_DAYS` | Cadence (s) et fenêtre (jours) du scheduler d'ingestion OpenAQ | `3600` / `1` |
+
+> Réglages avancés (WebSocket B8 : `WS_*` ; fenêtres de matching/ingestion : `MATCHING_*`, `OPENAQ_*`) documentés inline dans [`.env.example`](.env.example).
 
 ## Équipe
 
@@ -57,7 +82,8 @@ Projet mené **en solo** par Tristan (tous les axes : BDD, back, front, concepti
 
 - 📋 Board (GitHub Projects) : https://github.com/users/TristanPLS/projects/1
 - 🗺️ Roadmap produit : [roadmap.md](roadmap.md)
-- 🧭 Pitch produit : [docs/pitch.md](docs/pitch.md)
+- 📚 Dossier de conception (sources) : [personas](docs/personas.md) · [user stories](docs/user-stories.md) · [modèle de données — MCD/MLD](docs/data-model.md) · [fondations métier](docs/foundations.md) · [pitch & choix techniques](docs/pitch.md) · [recette fonctionnelle](docs/recette.md) — *consolidées dans le dossier PDF de remise (livrable L2)*
+- 🖼️ Preuves de fonctionnement (captures L4) : [docs/captures/](docs/captures/README.md)
 - 🎨 Identité visuelle : [docs/identity.md](docs/identity.md)
 - 🤖 Charte des agents : interne (non publiée)
 - 🧾 Journal d'actions des agents : [logs/](logs/)
