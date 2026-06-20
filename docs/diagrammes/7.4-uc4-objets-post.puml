@@ -1,0 +1,31 @@
+@startuml
+title UC4 - etat post-sequence (apres declenchement de l'alerte)
+
+object "events : alert_events (PostgreSQL)" as events {
+  etat = nouvel event insere (snapshot fige T4)
+  org_id = 42
+  parameter_code = pm25
+  measured_value = 50
+  threshold_value = 15.0
+  comparator = ">"
+  severity = warning
+  fired_at = now()
+}
+
+object "compteur : non-lus (T6)" as compteur_non_lus {
+  etat = incremente pour la ligne reellement inseree
+}
+
+object "canal : Redis quarity:alerts:org:42" as canal_redis {
+  etat = message AlertMessage { type alert, event } publie et consomme
+}
+
+object "panneau : AlertsPanel (navigateur)" as panneau_front {
+  etat = alerte affichee en tete de liste, sans rechargement
+  status WebSocket = open
+}
+
+events --> compteur_non_lus : incremente
+events --> canal_redis : publie sur
+canal_redis --> panneau_front : pousse l'alerte vers
+@enduml

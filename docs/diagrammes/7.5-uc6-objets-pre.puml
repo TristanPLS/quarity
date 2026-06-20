@@ -1,0 +1,38 @@
+@startuml
+title UC - etat pre-sequence (calcul de dose : aucun resultat)
+
+object "tlpAssoc : TrackedLocationProfile" as tlpAssoc {
+  id = 5
+  tracked_location_id = 1
+  exposure_profile_id = 3
+  start_time = "08:00"
+  end_time = "18:00"
+  days_mask = 31
+  timezone = "Europe/Paris"
+}
+
+object "profil : ExposureProfile" as profil {
+  id = 3
+  nom = "Enfants - ecole"
+}
+
+object "seuilPm25 : ExposureThreshold" as seuilPm25 {
+  parameter = "pm25"
+  threshold_value = 15.0
+  averaging_period = "24h"
+}
+
+object "stationA : RefLocation" as stationA {
+  openaq_location_id = 1001
+}
+
+object "resultatsDose : ExposureResults" as resultatsDose {
+  statut = "aucun resultat pour 2026-05-01..2026-05-31"
+}
+
+tlpAssoc --> profil : reference
+profil "1" --> "1..*" seuilPm25 : exposure_thresholds
+tlpAssoc --> stationA : via tracked_location_stations
+tlpAssoc --> resultatsDose : exposure_results (vide)
+
+@enduml

@@ -1,0 +1,46 @@
+@startuml
+title API publique par cle - GET /api/public/aqi
+
+actor "Client externe" as C
+participant "API (axum) /api/public/aqi" as API
+participant "PostgreSQL (api_tokens)" as PG
+participant "Redis (quota / rate-limit)" as Redis
+participant "ClickHouse" as CH
+
+C -> API : GET /api/public/aqi (X-API-Key: qrt_...)
+activate API
+API -> API : ApiKeyAuth -> hash SHA-256 du secret
+API -> PG : lookup api_tokens par token_hash (non revoquee, non expiree)
+activate PG
+alt Cle absente / revoquee / expiree
+    PG --> API : aucune correspondance
+    API --> C : 401 (cle invalide)
+else Cle valide
+    PG --> API : org_id = 7, scope = read
+    deactivate PG
+    API -> Redis : rate_limit_hit (compteur minute) [INCR + EXPIRE atomique]
+    activate Redis
+    Redis --> API : compteur courant
+    deactivate Redis
+    API -> Redis : compteur quota mensuel
+    activate Redis
+    Redis --> API : compteur courant
+    deactivate Redis
+    alt Rate-limit ou quota depasse
+        API --> C : 429 (rate_limited)
+    else Sous les limites
+        API -> API : overview_for_org(org_id = 7)  [logique partagee]
+        API -> PG : lieux actifs + stations (WHERE org_id = 7)
+        activate PG
+        PG --> API : lignes
+        deactivate PG
+        API -> CH : aqi_snapshot par station
+        activate CH
+        CH --> API : lignes AQI
+        deactivate CH
+        API --> C : 200 AqiOverview
+    end
+end
+deactivate API
+
+@enduml

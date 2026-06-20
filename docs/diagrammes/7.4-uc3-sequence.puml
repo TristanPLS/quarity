@@ -1,0 +1,58 @@
+@startuml
+title Regles d'alerte - Creation (POST) et Edition (PATCH) /api/alert-rules
+
+autonumber
+
+actor "Gestionnaire (navigateur)" as U
+participant "API axum (routes::alert_rules)" as API
+participant "PostgreSQL" as PG
+
+group Creation - POST /api/alert-rules
+note over U, PG : Creation - POST /api/alert-rules
+U -> API : POST /api/alert-rules { tracked_location_id, parameter, comparator, threshold_value, severity? } (Bearer)
+activate API
+note over API : CanWrite (403 read_only_role si lecteur), ValidatedJson (allowlist polluant, comparateur, seuil 0..)
+API -> PG : SELECT EXISTS(tracked_locations WHERE id = $1 AND org_id = jwt)
+activate PG
+PG --> API : appartient ou non
+deactivate PG
+alt lieu absent ou d'une autre org
+    API --> U : 404 tracked_location_not_found
+else lieu de l'org
+    API -> PG : BEGIN puis set_audit_actor(user_id) (T5)
+    API -> PG : INSERT alert_rules ... SELECT p.id FROM parameters WHERE code = $8 (COALESCE severity warning, status default active)
+    alt polluant hors referentiel (0 ligne)
+        API -> PG : (pas d'insert)
+        API --> U : 400 parameter invalide
+    else regle identique deja existante
+        PG --> API : violation uq_alert_rule
+        API --> U : 409 conflict
+    else succes
+        PG --> API : new_id
+        API -> PG : fetch_one_dto(org_id, new_id) puis COMMIT
+        API --> U : 201 Created { id, status=active, severity=warning, ... }
+    end
+end
+deactivate API
+end
+
+group Edition - PATCH /api/alert-rules/{id}
+note over U, PG : Edition - PATCH /api/alert-rules/{id}
+U -> API : PATCH /api/alert-rules/7 { threshold_value?, severity?, status? } (Bearer)
+activate API
+note over API : tracked_location_id et parameter immuables (absents du corps PATCH)
+API -> PG : BEGIN puis set_audit_actor(user_id) (T5 : update ou activate/deactivate)
+API -> PG : UPDATE alert_rules SET COALESCE(...) WHERE id = $1 AND org_id = jwt
+alt 0 ligne affectee
+    API --> U : 404 alert_rule_not_found
+else modification recoupe une regle existante
+    PG --> API : violation uq_alert_rule
+    API --> U : 409 conflict
+else succes
+    API -> PG : fetch_one_dto puis COMMIT
+    API --> U : 200 OK (etat apres mutation)
+end
+deactivate API
+end
+
+@enduml

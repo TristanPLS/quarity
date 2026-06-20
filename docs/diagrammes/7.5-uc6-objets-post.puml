@@ -1,0 +1,24 @@
+@startuml
+title UC - etat post-sequence (calcul de dose : resultat fige)
+
+object "tlpAssoc : TrackedLocationProfile" as tlpAssoc {
+  id = 5
+  tracked_location_id = 1
+  exposure_profile_id = 3
+}
+
+object "resultatDose : ExposureResult" as resultatDose {
+  tracked_location_profile_id = 5
+  parameter = "pm25"
+  averaging_period = "24h"
+  threshold_value = 15.0
+  period_start = "2026-05-01"
+  period_end = "2026-05-31"
+  hours_over_threshold = 12.0
+  sample_count = 744
+  computed_at = "2026-06-20T10:05:00Z"
+}
+
+tlpAssoc "1" --> "1..*" resultatDose : exposure_results (figes)
+
+@enduml

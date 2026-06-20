@@ -1,0 +1,32 @@
+@startuml
+title UC - etat post-sequence (overview AQI chargee et carte rendue)
+
+object "sessionFront : SessionFront" as sessionFront {
+  accessToken = "JWT valide"
+  overview = "chargee"
+}
+
+object "overviewAqi : AqiOverview" as overviewAqi {
+  computed_at = "2026-06-20T10:00:00Z"
+  nbLieux = 1
+}
+
+object "locationAqi : LocationAqi" as locationAqi {
+  tracked_location_id = 1
+  name = "Ecoles du centre-ville"
+  overall_aqi = 71
+  dominant_parameter = "pm25"
+  valid = true
+  has_data = true
+}
+
+object "marqueurCarte : MarqueurCarte" as marqueurCarte {
+  center = "43.70, 7.26"
+  couleur = "orange (niveau 3)"
+}
+
+sessionFront --> overviewAqi : detient
+overviewAqi "1" --> "0..*" locationAqi : data
+locationAqi --> marqueurCarte : rendu Leaflet
+
+@enduml

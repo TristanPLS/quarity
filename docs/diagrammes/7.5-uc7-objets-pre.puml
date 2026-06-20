@@ -1,0 +1,27 @@
+@startuml
+title UC - etat pre-sequence (API publique par cle : sous les limites)
+
+object "cleApi : ApiKey" as cleApi {
+  id = 42
+  org_id = 7
+  token_prefix = "qrt_a1b2"
+  token_hash = "sha256(...)"
+  scope = "read"
+  revoked_at = null
+  expires_at = null
+}
+
+object "quotaRedis : QuotaRedis" as quotaRedis {
+  cle = "compteur minute / mois"
+  valeur = "sous les limites"
+}
+
+object "lieuxOrg : LieuxOrg" as lieuxOrg {
+  org_id = 7
+  statut = "lieux suivis actifs"
+}
+
+cleApi --> lieuxOrg : autorise (org 7)
+cleApi --> quotaRedis : compteurs d'usage
+
+@enduml

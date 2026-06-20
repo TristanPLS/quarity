@@ -1,0 +1,57 @@
+@startuml
+title Authentification - POST /api/auth/login
+
+autonumber
+
+actor "Utilisateur (navigateur)" as U
+participant "API axum (routes::auth::login)" as API
+participant "Redis" as R
+participant "PostgreSQL" as PG
+participant "security (Argon2 / JWT)" as SEC
+
+U -> API : POST /api/auth/login { email, password }
+activate API
+note over API : ValidatedJson valide longueur et non-blancheur, puis normalise l'email (trim + minuscule)
+API -> R : rate_limit_hit(ratelimit:login:email:{email}, 60s)
+activate R
+R --> API : compteur email
+deactivate R
+alt compteur email > limite par minute
+    API --> U : 429 rate_limited
+end
+API -> R : rate_limit_hit(ratelimit:login:ip:{ip}, 60s)
+activate R
+R --> API : compteur ip
+deactivate R
+alt compteur ip > limite par minute
+    API --> U : 429 rate_limited
+end
+API -> PG : fetch_auth_context_by_email(email)
+activate PG
+PG --> API : contexte (user_id, org_id, role_code, can_write, password_hash, is_active) ou aucun
+deactivate PG
+alt email inconnu
+    API -> SEC : dummy_verify_password (cout Argon2 constant, anti-enumeration)
+    API --> U : 401 invalid_credentials
+else email connu
+    API -> SEC : verify_password(password, password_hash)
+    activate SEC
+    SEC --> API : vrai / faux
+    deactivate SEC
+    alt mot de passe invalide
+        API --> U : 401 invalid_credentials
+    else mot de passe valide
+        API -> SEC : issue_access_token(secret, user_id, org_id, role, can_write, jti, ttl)
+        activate SEC
+        SEC --> API : access_token (JWT HS256)
+        deactivate SEC
+        API -> R : store_refresh(refresh_token, user_id, org_id, refresh_ttl_secs)
+        activate R
+        R --> API : OK (cle refresh:{token} = user_id:org_id, TTL)
+        deactivate R
+        API --> U : 200 { access_token, refresh_token, token_type=Bearer, expires_in }
+    end
+end
+deactivate API
+
+@enduml

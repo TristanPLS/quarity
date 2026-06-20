@@ -1,0 +1,23 @@
+@startuml
+title UC1 - etat post-sequence (apres authentification)
+
+object "utilisateur : Navigateur" as utilisateur_navigateur {
+  etat = authentifie
+  access_token = JWT HS256 (sub, org_id, role, can_write, jti, exp)
+  refresh_token = UUID v4 opaque
+}
+
+object "users : PostgreSQL" as compte_pg {
+  etat = inchange
+  is_active = true
+}
+
+object "compteurs : Redis" as compteur_redis {
+  ratelimit_login_email = incremente (TTL 60s)
+  ratelimit_login_ip = incremente (TTL 60s)
+  refresh_token = cle refresh:{uuid} = user_id:org_id (TTL refresh_ttl_secs)
+}
+
+utilisateur_navigateur --> compte_pg : authentifie sur
+utilisateur_navigateur --> compteur_redis : session enregistree dans
+@enduml

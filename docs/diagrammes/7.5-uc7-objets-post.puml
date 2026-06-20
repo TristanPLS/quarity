@@ -1,0 +1,25 @@
+@startuml
+title UC - etat post-sequence (API publique par cle : compteurs incrementes)
+
+object "cleApi : ApiKey" as cleApi {
+  id = 42
+  org_id = 7
+  scope = "read"
+  last_used_at = "2026-06-20T10:10:00Z"
+}
+
+object "quotaRedis : QuotaRedis" as quotaRedis {
+  compteurMinute = "+1"
+  compteurMois = "+1"
+  statut = "sous les limites"
+}
+
+object "reponse : ReponseHttp" as reponse {
+  status = 200
+  corps = "AqiOverview de l'org 7"
+}
+
+cleApi --> quotaRedis : compteurs incrementes
+cleApi --> reponse : a produit
+
+@enduml

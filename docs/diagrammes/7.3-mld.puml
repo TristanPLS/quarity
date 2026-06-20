@@ -1,0 +1,277 @@
+@startuml
+title MLD - modele logique de donnees
+
+hide circle
+skinparam linetype ortho
+
+entity "organizations" as organizations {
+  * id : bigint <<PK>>
+  --
+  * name : text
+  * slug : citext <<UK>>
+  segment : text
+  deleted_at : timestamptz
+  * unread_alert_count : integer
+}
+
+entity "users" as users {
+  * id : bigint <<PK>>
+  --
+  * email : citext <<UK>>
+  * password_hash : text
+  full_name : text
+  * is_active : boolean
+}
+
+entity "roles" as roles {
+  * id : int <<PK>>
+  --
+  * code : text <<UK>>
+  * can_manage_org : boolean
+  * can_write : boolean
+}
+
+entity "memberships" as memberships {
+  * id : bigint <<PK>>
+  --
+  * org_id : bigint <<FK>>
+  * user_id : bigint <<FK>>
+  * role_id : int <<FK>>
+  invited_by : bigint <<FK>>
+}
+
+entity "subscription_plans" as subscription_plans {
+  * id : int <<PK>>
+  --
+  * code : text <<UK>>
+  * monthly_request_quota : integer
+  * rate_limit_per_min : integer
+}
+
+entity "organization_subscriptions" as organization_subscriptions {
+  * id : bigint <<PK>>
+  --
+  * org_id : bigint <<FK>>
+  * plan_id : int <<FK>>
+  * status : text
+}
+
+entity "api_tokens" as api_tokens {
+  * id : bigint <<PK>>
+  --
+  * org_id : bigint <<FK>>
+  created_by : bigint <<FK>>
+  * token_hash : text <<UK>>
+  * scope : text
+  revoked_at : timestamptz
+}
+
+entity "parameters" as parameters {
+  * id : int <<PK>>
+  --
+  * code : text <<UK>>
+  * unit : text
+  openaq_parameter_id : integer <<UK>>
+}
+
+entity "ref_locations" as ref_locations {
+  * id : bigint <<PK>>
+  --
+  openaq_location_id : bigint <<UK>>
+  * country : char
+  * latitude : double
+  * longitude : double
+}
+
+entity "ref_sensors" as ref_sensors {
+  * id : bigint <<PK>>
+  --
+  openaq_sensor_id : bigint <<UK>>
+  * ref_location_id : bigint <<FK>>
+  * parameter_id : int <<FK>>
+  last_value : numeric
+}
+
+entity "aqi_categories" as aqi_categories {
+  * category : smallint <<PK>>
+  --
+  * label : text
+  * color_hex : char
+}
+
+entity "aqi_breakpoints" as aqi_breakpoints {
+  * id : int <<PK>>
+  --
+  * parameter_id : int <<FK>>
+  * category : smallint <<FK>>
+  * averaging_period : text
+  * unit : text
+  * conc_low : numeric
+  * conc_high : numeric
+  * aqi_low : integer
+  * aqi_high : integer
+}
+
+entity "tracked_locations" as tracked_locations {
+  * id : bigint <<PK>>
+  --
+  * org_id : bigint <<FK>>
+  * name : text
+  * is_active : boolean
+  created_by : bigint <<FK>>
+}
+
+entity "tracked_location_stations" as tracked_location_stations {
+  * id : bigint <<PK>>
+  --
+  * tracked_location_id : bigint <<FK>>
+  * ref_location_id : bigint <<FK>>
+  * is_primary : boolean
+}
+
+entity "alert_rules" as alert_rules {
+  * id : bigint <<PK>>
+  --
+  * org_id : bigint <<FK>>
+  * tracked_location_id : bigint <<FK>>
+  * parameter_id : int <<FK>>
+  * comparator : text
+  * threshold_value : numeric
+  * severity : text
+  * status : text
+  created_by : bigint <<FK>>
+}
+
+entity "alert_rule_recipients" as alert_rule_recipients {
+  * id : bigint <<PK>>
+  --
+  * alert_rule_id : bigint <<FK>>
+  * channel : text
+  user_id : bigint <<FK>>
+  email : citext
+  webhook_url : text
+}
+
+entity "alert_events" as alert_events {
+  * id : bigint <<PK>>
+  --
+  alert_rule_id : bigint <<FK>>
+  * org_id : bigint <<FK>>
+  tracked_location_id : bigint <<FK>>
+  ref_location_id : bigint
+  openaq_location_id : bigint
+  openaq_sensor_id : bigint
+  * parameter_code : text
+  * measured_value : numeric
+  * measured_at : timestamptz
+  * threshold_value : numeric
+  * severity : text
+  * is_read : boolean
+}
+
+entity "notification_deliveries" as notification_deliveries {
+  * id : bigint <<PK>>
+  --
+  * alert_event_id : bigint <<FK>>
+  recipient_id : bigint <<FK>>
+  * channel : text
+  * status : text
+  * attempts : smallint
+}
+
+entity "exposure_profiles" as exposure_profiles {
+  * id : bigint <<PK>>
+  --
+  org_id : bigint <<FK>>
+  * code : text
+  * is_system : boolean
+}
+
+entity "exposure_thresholds" as exposure_thresholds {
+  * id : bigint <<PK>>
+  --
+  * exposure_profile_id : bigint <<FK>>
+  * parameter_id : int <<FK>>
+  * threshold_value : numeric
+  * averaging_period : text
+}
+
+entity "tracked_location_profiles" as tracked_location_profiles {
+  * id : bigint <<PK>>
+  --
+  * tracked_location_id : bigint <<FK>>
+  * exposure_profile_id : bigint <<FK>>
+  * start_time : time
+  * end_time : time
+  * days_mask : smallint
+  * timezone : text
+  * is_active : boolean
+}
+
+entity "exposure_results" as exposure_results {
+  * id : bigint <<PK>>
+  --
+  * tracked_location_profile_id : bigint <<FK>>
+  * parameter_id : int <<FK>>
+  * averaging_period : text
+  * period_start : date
+  * period_end : date
+  * hours_over_threshold : numeric
+  * sample_count : integer
+}
+
+entity "audit_log" as audit_log {
+  * id : bigint <<PK>>
+  --
+  org_id : bigint <<FK>>
+  actor_user_id : bigint <<FK>>
+  * entity_type : text
+  entity_id : bigint
+  * action : text
+  diff : jsonb
+}
+
+organizations ||--o{ memberships : ""
+users         ||--o{ memberships : ""
+roles         ||--o{ memberships : ""
+users         |o--o{ memberships : "invited_by"
+organizations ||--o{ organization_subscriptions : ""
+subscription_plans ||--o{ organization_subscriptions : ""
+organizations ||--o{ api_tokens : ""
+users         |o--o{ api_tokens : "created_by"
+
+ref_locations ||--o{ ref_sensors : ""
+parameters    ||--o{ ref_sensors : ""
+parameters    ||--o{ aqi_breakpoints : ""
+aqi_categories ||--o{ aqi_breakpoints : ""
+
+organizations ||--o{ tracked_locations : ""
+users         |o--o{ tracked_locations : "created_by"
+tracked_locations ||--o{ tracked_location_stations : ""
+ref_locations ||--o{ tracked_location_stations : ""
+
+organizations ||--o{ alert_rules : ""
+tracked_locations ||--o{ alert_rules : ""
+parameters    ||--o{ alert_rules : ""
+users         |o--o{ alert_rules : "created_by"
+alert_rules   ||--o{ alert_rule_recipients : ""
+users         |o--o{ alert_rule_recipients : "user_id"
+
+alert_rules   |o--o{ alert_events : ""
+organizations ||--o{ alert_events : ""
+tracked_locations |o--o{ alert_events : ""
+alert_events  ||--o{ notification_deliveries : ""
+alert_rule_recipients |o--o{ notification_deliveries : "recipient_id"
+
+organizations |o--o{ exposure_profiles : ""
+exposure_profiles ||--o{ exposure_thresholds : ""
+parameters    ||--o{ exposure_thresholds : ""
+tracked_locations ||--o{ tracked_location_profiles : ""
+exposure_profiles ||--o{ tracked_location_profiles : ""
+tracked_location_profiles ||--o{ exposure_results : ""
+parameters    ||--o{ exposure_results : ""
+
+organizations |o--o{ audit_log : ""
+users         |o--o{ audit_log : "actor_user_id"
+
+@enduml

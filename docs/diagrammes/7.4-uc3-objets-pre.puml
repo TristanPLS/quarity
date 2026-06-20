@@ -1,0 +1,28 @@
+@startuml
+title UC3 - etat pre-sequence (avant creation de la regle)
+
+object "gestionnaire : Navigateur" as gestionnaire_navigateur {
+  access_token = JWT valide
+  can_write = true
+  org_id = 42
+}
+
+object "lieu : tracked_locations (PostgreSQL)" as lieu {
+  id = 7
+  org_id = 42
+  is_active = true
+}
+
+object "parameters : PostgreSQL" as referentiel_polluants {
+  code pm25 = present (unite canonique)
+}
+
+object "regles : alert_rules (PostgreSQL)" as regles {
+  etat = aucune regle (pm25, > , 15) sur le lieu 7
+}
+
+gestionnaire_navigateur --> lieu : cible le lieu
+gestionnaire_navigateur --> regles : va creer une regle dans
+regles --> lieu : porte sur
+regles --> referentiel_polluants : reference le polluant
+@enduml

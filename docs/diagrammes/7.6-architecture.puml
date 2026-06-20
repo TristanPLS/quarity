@@ -1,0 +1,71 @@
+@startuml
+title Architecture applicative
+
+package "Clients" {
+  component "Front React / TypeScript" as Front
+  component "Client WebSocket (panneau d'alertes)" as WsClient
+  component "Consommateur d'API publique (X-API-Key)" as ApiTiers
+}
+
+package "Binaire serveur (main.rs)" {
+  component "Serveur axum + routeur" as Router
+  component "Couches transverses (CORS, en-tetes securite, tracing)" as Layers
+  component "Routes auth (login / refresh / logout / me)" as AuthRoutes
+  component "Routes CRUD metier (lieux, regles, profils, seuils, associations, cles API, users, orgs)" as CrudRoutes
+  component "Routes AQI / mesures / evenements d'alerte" as AqiRoutes
+  component "Routes API publique (ApiKeyAuth)" as PublicRoutes
+  component "Route WebSocket /api/ws" as WsRoute
+  component "Boucle de matching (tache de fond)" as Matching
+  component "Cache de regles (Moka L1, TTL)" as RuleCache
+  component "Abonne Redis pub/sub (PSUBSCRIBE)" as Subscriber
+  component "AlertHub (registre clients WS par org)" as Hub
+  component "Sessions WebSocket" as WsSessions
+}
+
+package "Binaire ingestion (bin/ingest.rs)" {
+  component "Ingestion OpenAQ (one-shot ou scheduler)" as Ingest
+}
+
+package "Sources et stockages" {
+  database "API OpenAQ v3" as OpenAQ
+  database "PostgreSQL - donnees metier" as PG
+  database "ClickHouse - mesures / AQI / doses" as CH
+  database "Redis - tokens, pub/sub, quotas" as Redis
+}
+
+Front --> Layers
+ApiTiers --> Layers
+WsClient --> WsRoute : ws + token
+Layers --> Router
+Router --> AuthRoutes
+Router --> CrudRoutes
+Router --> AqiRoutes
+Router --> PublicRoutes
+Router --> WsRoute
+
+AuthRoutes --> PG
+AuthRoutes --> Redis
+CrudRoutes --> PG
+AqiRoutes --> CH
+AqiRoutes --> PG
+PublicRoutes --> Redis
+PublicRoutes --> CH
+PublicRoutes --> PG
+
+Matching --> RuleCache
+RuleCache --> PG
+Matching --> CH : lit les arrivees
+Matching --> PG : ecrit les evenements
+Matching --> Redis : PUBLISH alertes
+
+Redis --> Subscriber : messages canal org
+Subscriber --> Hub
+Hub --> WsSessions
+WsRoute --> Hub
+WsSessions --> WsClient : push alertes
+
+Ingest --> OpenAQ : GET mesures
+Ingest --> CH : INSERT mesures
+Ingest --> PG : liaison station / org
+
+@enduml

@@ -1,0 +1,52 @@
+@startuml
+title Calcul de dose d'exposition - POST /api/tracked-location-profiles/{id}/compute-dose
+
+actor "Utilisateur (droit ecriture)" as U
+participant "Front (React)" as Front
+participant "API (axum) compute-dose" as API
+participant "PostgreSQL" as PG
+participant "ClickHouse" as CH
+
+U -> Front : Lance le calcul de dose (periode)
+activate Front
+Front -> API : POST /api/tracked-location-profiles/5/compute-dose?period_start&period_end
+activate API
+API -> API : CanWrite (sinon 403) + validation des dates
+API -> API : borne la periode (max 366 jours, sinon 400)
+API -> PG : SELECT association (id=5 ET org du JWT) -> plage, days_mask, tz
+activate PG
+PG --> API : TlpRow (ou aucune -> 404)
+deactivate PG
+API -> PG : SELECT stations du lieu
+activate PG
+PG --> API : openaq_location_id[]
+deactivate PG
+API -> PG : SELECT seuils du profil
+activate PG
+PG --> API : (parameter, threshold_value, averaging_period)[]
+deactivate PG
+
+loop Par seuil 1h/8h/24h (buffer_unordered, max 8 en vol)
+    API -> CH : exposure_dose.sql (locs, param, avg_hours, threshold, from/to, plage, days_mask, tz)
+    activate CH
+    CH --> API : DoseRow { hours_over_threshold, sample_count }
+    deactivate CH
+end
+
+loop Par dose calculee (sequentiel)
+    API -> PG : CALL compute_exposure_dose(...) -> fige dans exposure_results
+    activate PG
+    PG --> API : result_id
+    deactivate PG
+end
+
+API -> PG : SELECT exposure_results de la periode
+activate PG
+PG --> API : ExposureResultDto[]
+deactivate PG
+API --> Front : 200 [ExposureResultDto]
+deactivate API
+Front -> U : Affiche les doses (heures de depassement par seuil)
+deactivate Front
+
+@enduml

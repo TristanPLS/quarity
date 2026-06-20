@@ -1,0 +1,27 @@
+@startuml
+title UC4 - etat pre-sequence (avant declenchement de l'alerte)
+
+object "index : RuleIndex (Moka L1, en memoire)" as index_regles {
+  cle (station 1001, pm25) = regle id 3, comparator ">", seuil 15.0, severity warning, org_id 42
+}
+
+object "mesures : ClickHouse" as clickhouse {
+  nouvelle arrivee = station 1001, pm25 = 50, ingested_at > watermark
+}
+
+object "events : alert_events (PostgreSQL)" as events {
+  etat = aucun event pour (regle 3, capteur, measured_at)
+}
+
+object "session : WebSocket (org 42)" as session_ws {
+  etat = ouverte, enregistree dans AlertHub sous org_id 42
+}
+
+object "panneau : AlertsPanel (navigateur)" as panneau_front {
+  etat = liste d'alertes courante (sans ce depassement)
+}
+
+clickhouse --> index_regles : evaluee contre
+index_regles --> events : (aucun event encore)
+session_ws --> panneau_front : alimente
+@enduml

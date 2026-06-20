@@ -1,0 +1,27 @@
+@startuml
+title UC2 - etat pre-sequence (avant creation du lieu)
+
+object "gestionnaire : Navigateur" as gestionnaire_navigateur {
+  access_token = JWT valide
+  role = gestionnaire
+  can_write = true
+  org_id = 42
+}
+
+object "ref_locations : PostgreSQL" as referentiel {
+  openaq_location_id 1001 = present
+  openaq_location_id 1002 = present
+}
+
+object "tracked_locations : PostgreSQL" as lieux {
+  aucun lieu nomme "Ecoles du centre-ville" dans org 42
+}
+
+object "tracked_location_stations : PostgreSQL" as liaisons {
+  etat = aucune liaison pour ce lieu (inexistant)
+}
+
+gestionnaire_navigateur --> referentiel : reference les stations
+gestionnaire_navigateur --> lieux : va creer un lieu dans
+lieux --> liaisons : (aucune liaison)
+@enduml

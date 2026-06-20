@@ -1,0 +1,28 @@
+@startuml
+title UC2 - etat post-sequence (apres creation du lieu)
+
+object "lieu : tracked_locations (PostgreSQL)" as lieu_cree {
+  id = nouveau
+  org_id = 42
+  name = "Ecoles du centre-ville"
+  is_active = true
+  station_count = 2
+}
+
+object "liaisons : tracked_location_stations" as liaisons {
+  station 1001 = is_primary true
+  station 1002 = is_primary false
+}
+
+object "regles : alert_rules (si rules fournies)" as regles {
+  etat = creees, status active, audit T5 trace
+}
+
+object "gestionnaire : Navigateur" as gestionnaire_navigateur {
+  etat = detail du lieu recu (201)
+}
+
+lieu_cree --> liaisons : associe les stations
+lieu_cree --> regles : peut declencher la creation de
+gestionnaire_navigateur --> lieu_cree : recoit le detail (201) de
+@enduml

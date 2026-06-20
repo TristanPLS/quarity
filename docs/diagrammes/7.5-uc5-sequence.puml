@@ -1,0 +1,42 @@
+@startuml
+title Affichage du tableau de bord AQI et carte - GET /api/aqi
+
+actor "Utilisateur" as U
+participant "Front (React/Leaflet)" as Front
+participant "API (axum) /api/aqi" as API
+participant "PostgreSQL" as PG
+participant "ClickHouse" as CH
+participant "OpenStreetMap" as OSM
+
+U -> Front : Ouvre le tableau de bord
+activate Front
+Front -> API : GET /api/aqi (Authorization: Bearer JWT)
+activate API
+API -> API : AuthUser -> org_id depuis le JWT
+API -> PG : SELECT lieux actifs + stations + coords (WHERE org_id = $1)
+activate PG
+PG --> API : lignes (tracked_location, openaq_location_id, lat, lon)
+deactivate PG
+API -> API : regroupe par lieu, collecte stations distinctes
+
+loop Par station distincte (buffer_unordered, max 16 en vol)
+    API -> CH : aqi_snapshot (param_loc, param_at) [requete embarquee]
+    activate CH
+    CH --> API : lignes AQI par polluant (aqi, conc, coverage, is_valid)
+    deactivate CH
+end
+
+note over API : Echec de lecture d'une station -> tracee (warn),\ntraitee sans donnee (best-effort)
+API -> API : agrege par lieu (MAX par polluant, puis AQI global + dominant)
+API --> Front : 200 AqiOverview { computed_at, data[] }
+deactivate API
+
+Front -> Front : filtre les lieux avec coordonnees
+Front -> OSM : charge les tuiles de fond (TileLayer)
+activate OSM
+OSM --> Front : tuiles PNG
+deactivate OSM
+Front -> U : Carte + marqueurs colores par niveau AQI
+deactivate Front
+
+@enduml

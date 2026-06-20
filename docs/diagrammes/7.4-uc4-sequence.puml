@@ -1,0 +1,54 @@
+@startuml
+title Boucle de matching des alertes et push temps reel WebSocket
+
+autonumber
+
+participant "Boucle de matching (run_loop / run_once)" as BM
+participant "Cache Moka (RuleCache)" as CACHE
+participant "ClickHouse" as CH
+participant "PostgreSQL" as PG
+participant "Redis (pub/sub)" as R
+participant "Abonne pub/sub + AlertHub" as SUB
+participant "Session WebSocket" as WS
+participant "Front (useAlertsSocket / AlertsPanel)" as FE
+
+note over BM : tick periodique (MATCHING_INTERVAL_SECS) ; alternative : force-check POST /api/alert-rules/{id}/run
+BM -> CACHE : index() (rechargement si TTL expire)
+activate CACHE
+CACHE -> PG : load_rule_index (regles actives, lieu actif, org vivante)
+activate PG
+PG --> CACHE : regles compilees
+deactivate PG
+CACHE --> BM : Arc<RuleIndex>
+deactivate CACHE
+BM -> CH : query_new_measurements(ingested_at > watermark, limit)
+activate CH
+CH --> BM : lot de mesures
+deactivate CH
+note over BM : evaluate() : lookup O(1) (station, polluant) puis comparaison de seuil (NaN/Inf ignores)
+BM -> PG : insert_events (UNNEST, ON CONFLICT DO NOTHING sur (rule_id, sensor_id, measured_at))
+activate PG
+note over PG : T7 BEFORE (coherence org/lieu), T6 AFTER (compteur non-lus) sur les lignes reellement inserees
+PG --> BM : RETURNING evenements reellement crees (vide si rejouage)
+deactivate PG
+alt aucun evenement nouveau (rejouage idempotent)
+    BM -> BM : rien a publier, avancement du curseur
+else evenements crees
+    BM -> R : publish_alert_events : PUBLISH quarity:alerts:org:42 (eventail borne, best-effort)
+    activate R
+    R --> SUB : message du canal (PSUBSCRIBE quarity:alerts:org:*)
+    deactivate R
+    activate SUB
+    note over SUB : org_id derive du nom de canal puis AlertHub.dispatch (try_send non bloquant)
+    SUB -> WS : payload depose sur le canal mpsc du client de l'org 42
+    deactivate SUB
+    activate WS
+    WS -> FE : Message Text { type: "alert", event } (push WebSocket)
+    deactivate WS
+    activate FE
+    note over FE : onmessage : JSON.parse puis mergeAlerts (fusion par id, plafond 50, pas de doublon avec le backfill)
+    FE -> FE : setAlerts -> AlertsPanel re-rendu (sans rechargement)
+    deactivate FE
+end
+
+@enduml

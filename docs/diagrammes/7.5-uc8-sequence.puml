@@ -1,0 +1,47 @@
+@startuml
+title Ingestion OpenAQ -> ClickHouse / PostgreSQL (quarity-ingest)
+
+participant "quarity-ingest" as Ing
+participant "OpenAQ API v3" as OAQ
+participant "ClickHouse" as CH
+participant "PostgreSQL" as PG
+
+Ing -> OAQ : GET /v3/locations/{id}  (X-API-Key)
+activate OAQ
+OAQ --> Ing : station + liste des capteurs
+deactivate OAQ
+
+loop Par capteur (polluant dans l'allowlist)
+    Ing -> OAQ : GET /v3/sensors/{id}/hours (pagination, retry/backoff)
+    activate OAQ
+    OAQ --> Ing : mesures horaires
+    deactivate OAQ
+    Ing -> Ing : normalisation (value/datetime manquants ignores;\nunite manquante ignoree + comptee, D4.2)
+    Ing -> Ing : pause de politesse entre capteurs
+end
+
+alt Aucune mesure dans la fenetre
+    Ing -> Ing : rien a inserer -> fin du run
+else Mesures presentes
+    Ing -> CH : INSERT batch quarity.measurements (FORMAT JSONEachRow, idempotent)
+    activate CH
+    CH --> Ing : OK
+    deactivate CH
+    Ing -> PG : upsert organizations/ref_locations (ON CONFLICT)
+    activate PG
+    PG --> Ing : ref_location_id
+    deactivate PG
+    loop Par capteur
+        Ing -> PG : upsert ref_sensors (ON CONFLICT DO NOTHING)
+        activate PG
+        PG --> Ing : OK
+        deactivate PG
+    end
+    Ing -> PG : upsert tracked_locations + tracked_location_stations
+    activate PG
+    PG --> Ing : tracked_location_id
+    deactivate PG
+    Ing -> Ing : resume du run (mesures inserees, ignorees sans unite)
+end
+
+@enduml
