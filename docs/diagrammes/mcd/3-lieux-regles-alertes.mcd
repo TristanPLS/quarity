@@ -1,0 +1,34 @@
+:
+Notification: id_notif, canal, statut, tentatives
+:
+Parametre: id_param, code, unite
+:
+:
+
+:
+Notifier, 0N Evenement alerte, 11 Notification
+Declencher, 0N Regle alerte, 01 Evenement alerte
+Cibler, 0N Parametre, 11 Regle alerte
+:
+:
+
+Localiser, 0N Lieu suivi, 01 Evenement alerte
+Evenement alerte: id_evt, valeur_mesuree, mesure_le, seuil_franchi, severite, lu
+Imputer, 0N Organisation, 11 Evenement alerte
+Regle alerte: id_regle, comparateur, seuil, severite, statut
+Destinataire, 0N Regle alerte, 0N Utilisateur: canal
+Utilisateur: id_user, email
+
+Station: id_station, latitude, longitude
+Definir lieu, 0N Organisation, 11 Lieu suivi
+Organisation: id_org, nom
+Posseder, 0N Organisation, 11 Regle alerte
+:
+:
+
+Rattacher, 1N Lieu suivi, 0N Station: principale
+Lieu suivi: id_lieu, nom, actif
+:
+:
+Porter, 0N Lieu suivi, 11 Regle alerte
+:

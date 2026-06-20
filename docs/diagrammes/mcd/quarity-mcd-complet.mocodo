@@ -1,0 +1,58 @@
+% MCD Quarity - source Mocodo (a coller sur https://mocodo.net)
+% Notation Merise : entites = rectangles, associations = losanges, cardinalites (min,max).
+% Tokens de cardinalite Mocodo : 01 = (0,1) ; 11 = (1,1) ; 0N = (0,n) ; 1N = (1,n).
+
+% =================== Domaine 1 : Identite et acces ===================
+Organisation: id_org, nom, slug, segment, alertes_non_lues
+Utilisateur: id_user, email, nom_complet, actif
+Role: id_role, code, peut_gerer_org, peut_ecrire
+Plan: id_plan, code, quota_mensuel, limite_par_minute
+Cle API: id_cle, hash_jeton, portee, revoquee_le
+
+Adherer, 1N Utilisateur, 1N Organisation, 0N Role
+Souscrire, 0N Organisation, 0N Plan: statut
+Emettre, 0N Organisation, 11 Cle API
+Creer cle, 0N Utilisateur, 01 Cle API
+
+% =================== Domaine 2 : Donnees de reference (air) ===================
+Parametre: id_param, code, unite, id_openaq
+Station: id_station, id_openaq_lieu, pays, latitude, longitude
+Capteur: id_capteur, id_openaq_capteur, derniere_valeur
+Categorie AQI: categorie, libelle, couleur
+Palier AQI: id_palier, periode, conc_basse, conc_haute, aqi_bas, aqi_haut
+
+Heberger, 0N Station, 11 Capteur
+Mesurer, 0N Parametre, 11 Capteur
+Definir palier, 0N Parametre, 11 Palier AQI
+Classer, 0N Categorie AQI, 11 Palier AQI
+
+% =================== Domaine 3 : Lieux suivis, regles, alertes ===================
+Lieu suivi: id_lieu, nom, actif
+Regle alerte: id_regle, comparateur, seuil, severite, statut
+Evenement alerte: id_evt, valeur_mesuree, mesure_le, seuil_franchi, severite, lu
+Notification: id_notif, canal, statut, tentatives
+
+Definir lieu, 0N Organisation, 11 Lieu suivi
+Rattacher, 1N Lieu suivi, 0N Station: principale
+Posseder, 0N Organisation, 11 Regle alerte
+Porter, 0N Lieu suivi, 11 Regle alerte
+Cibler, 0N Parametre, 11 Regle alerte
+Destinataire, 0N Regle alerte, 0N Utilisateur: canal
+Declencher, 0N Regle alerte, 01 Evenement alerte
+Imputer, 0N Organisation, 11 Evenement alerte
+Localiser, 0N Lieu suivi, 01 Evenement alerte
+Notifier, 0N Evenement alerte, 11 Notification
+
+% =================== Domaine 4 : Profils d'exposition et doses ===================
+Profil exposition: id_profil, code, systeme
+Seuil exposition: id_seuil, valeur, periode
+Exposition: id_expo, heure_debut, heure_fin, jours_actifs, fuseau, actif
+Resultat dose: id_resultat, periode, debut, fin, heures_depassement, nb_echantillons
+
+Posseder profil, 0N Organisation, 01 Profil exposition
+Fixer, 1N Profil exposition, 11 Seuil exposition
+Concerner, 0N Parametre, 11 Seuil exposition
+Concerner lieu, 0N Lieu suivi, 11 Exposition
+Selon profil, 0N Profil exposition, 11 Exposition
+Produire, 11 Exposition, 0N Resultat dose
+Pour polluant, 0N Parametre, 11 Resultat dose

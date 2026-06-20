@@ -1,0 +1,17 @@
+Mesurer, 0N Parametre, 11 Capteur
+Parametre: id_param, code, unite, id_openaq
+Definir palier, 0N Parametre, 11 Palier AQI
+:
+:
+
+Capteur: id_capteur, id_openaq_capteur, derniere_valeur
+Heberger, 0N Station, 11 Capteur
+Palier AQI: id_palier, periode, conc_basse, conc_haute, aqi_bas, aqi_haut
+Classer, 0N Categorie AQI, 11 Palier AQI
+Categorie AQI: categorie, libelle, couleur
+
+:
+Station: id_station, id_openaq_lieu, pays, latitude, longitude
+:
+:
+:

@@ -1,0 +1,14 @@
+:
+Creer cle, 0N Utilisateur, 01 Cle API
+Cle API: id_cle, hash_jeton, portee, revoquee_le
+:
+
+:
+Utilisateur: id_user, email, nom_complet, actif
+Emettre, 0N Organisation, 11 Cle API
+Plan: id_plan, code, quota_mensuel, limite_par_minute
+
+Role: id_role, code, peut_gerer_org, peut_ecrire
+Adherer, 1N Utilisateur, 1N Organisation, 0N Role
+Organisation: id_org, nom, slug, segment, alertes_non_lues
+Souscrire, 0N Organisation, 0N Plan: statut
