@@ -1,0 +1,30 @@
+@startuml
+title UC - etat post-sequence (ingestion OpenAQ : mesures inserees)
+
+object "refLocation : RefLocation" as refLocation {
+  openaq_location_id = 4085
+  name = "NICE PROMENADE"
+  country = "FR"
+  last_seen_at = "2026-06-20T10:15:00Z"
+}
+
+object "refSensor : RefSensor" as refSensor {
+  openaq_sensor_id = 5001
+  parameter = "pm25"
+}
+
+object "trackedLocation : TrackedLocation" as trackedLocation {
+  org_id = 7
+  name = "NICE PROMENADE (OpenAQ)"
+}
+
+object "mesuresCH : SerieClickHouse" as mesuresCH {
+  location_id = 4085
+  statut = "mesures inserees (ReplacingMergeTree)"
+}
+
+trackedLocation "1" --> "1..*" refLocation : tracked_location_stations
+refLocation "1" --> "1..*" refSensor : ref_sensors
+refLocation --> mesuresCH : series ClickHouse
+
+@enduml

@@ -1,0 +1,68 @@
+@startuml
+title Diagramme de cas d'utilisation
+left to right direction
+
+actor "Lecteur" as lecteur
+actor "Gestionnaire" as gestionnaire
+actor "Administrateur" as admin
+actor "Consommateur d'API publique" as consoApi
+actor "Systeme (ingestion / matching / alertes)" as systeme
+
+rectangle "Quarity" {
+    usecase "S'authentifier (login / refresh / logout)" as uc1
+    usecase "Consulter l'AQI des lieux suivis" as uc2
+    usecase "Consulter les mesures d'une station" as uc3
+    usecase "Visualiser la carte des lieux" as uc4
+    usecase "Recevoir les alertes temps reel (WebSocket)" as uc5
+    usecase "Consulter l'historique des alertes" as uc6
+
+    usecase "Gerer les lieux suivis (CRUD)" as uc7
+    usecase "Gerer les regles d'alerte (CRUD)" as uc8
+    usecase "Forcer la reevaluation d'une regle" as uc9
+    usecase "Gerer les profils d'exposition et leurs seuils" as uc10
+    usecase "Gerer les associations lieu x profil" as uc11
+    usecase "Calculer une dose d'exposition" as uc12
+    usecase "Consulter les resultats de dose" as uc13
+
+    usecase "Gerer les utilisateurs" as uc14
+    usecase "Gerer l'organisation" as uc15
+    usecase "Gerer les cles API" as uc16
+
+    usecase "Consulter l'AQI (cle API)" as uc17
+    usecase "Consulter les mesures (cle API)" as uc18
+
+    usecase "Ingerer les mesures OpenAQ" as uc19
+    usecase "Apparier mesures et regles actives" as uc20
+    usecase "Publier et distribuer les alertes" as uc21
+}
+
+lecteur --> uc1
+lecteur --> uc2
+lecteur --> uc3
+lecteur --> uc4
+lecteur --> uc5
+lecteur --> uc6
+
+gestionnaire --> uc7
+gestionnaire --> uc8
+gestionnaire --> uc9
+gestionnaire --> uc10
+gestionnaire --> uc11
+gestionnaire --> uc12
+gestionnaire --> uc13
+
+admin --> uc14
+admin --> uc15
+admin --> uc16
+
+gestionnaire --|> lecteur
+admin --|> gestionnaire
+
+consoApi --> uc17
+consoApi --> uc18
+
+systeme --> uc19
+systeme --> uc20
+systeme --> uc21
+
+@enduml

@@ -1,0 +1,56 @@
+@startgantt
+title Figure 9.1 - Chronologie du projet Quarity (jalons B0-B11 + finition v1.0)
+
+-- Cadrage et modelisation --
+[Jalon 0 - Cadrage (repo, board, charte)] lasts 3 days
+[Jalon 1 - Modelisation (MCD/MLD, ClickHouse)] lasts 1 days
+
+-- Walking skeleton (Jalon 2) --
+[Skeleton bout-en-bout (auth, mesures, front)] lasts 2 days
+[Skeleton bout-en-bout (auth, mesures, front)] starts at [Jalon 1 - Modelisation (MCD/MLD, ClickHouse)]'s end
+[Durcissement socle (auth, ingestion, sqlx)] lasts 3 days
+[Durcissement socle (auth, ingestion, sqlx)] starts at [Skeleton bout-en-bout (auth, mesures, front)]'s end
+
+-- Jalon 3 - BDD --
+[B1-B4 vues, triggers, procedures, requete] lasts 1 days
+[B1-B4 vues, triggers, procedures, requete] starts at [Durcissement socle (auth, ingestion, sqlx)]'s end
+[B5 ClickHouse moyennes glissantes + AQI] lasts 2 days
+[B5 ClickHouse moyennes glissantes + AQI] starts at [B1-B4 vues, triggers, procedures, requete]'s end
+
+-- Jalon 3 - Back --
+[B6 CRUD 20 endpoints] lasts 1 days
+[B6 CRUD 20 endpoints] starts at [B5 ClickHouse moyennes glissantes + AQI]'s end
+[B7 Boucle de matching (Moka L1)] lasts 1 days
+[B7 Boucle de matching (Moka L1)] starts at [B6 CRUD 20 endpoints]'s end
+[B8 Pub/sub Redis -> WebSocket] lasts 1 days
+[B8 Pub/sub Redis -> WebSocket] starts at [B7 Boucle de matching (Moka L1)]'s end
+[B8b Durcissement WebSocket] lasts 1 days
+[B8b Durcissement WebSocket] starts at [B8 Pub/sub Redis -> WebSocket]'s end
+[B9a Profils exposition + calcul de dose] lasts 1 days
+[B9a Profils exposition + calcul de dose] starts at [B8b Durcissement WebSocket]'s end
+[B9b API publique par cle + quotas] lasts 1 days
+[B9b API publique par cle + quotas] starts at [B9a Profils exposition + calcul de dose]'s end
+
+-- Jalon 3 - Front --
+[B10 Vue d'ensemble AQI (jauges)] lasts 1 days
+[B10 Vue d'ensemble AQI (jauges)] starts at [B6 CRUD 20 endpoints]'s end
+[B10b Carte Leaflet/OSM] lasts 1 days
+[B10b Carte Leaflet/OSM] starts at [B10 Vue d'ensemble AQI (jauges)]'s end
+[B11a Client WebSocket alertes] lasts 2 days
+[B11a Client WebSocket alertes] starts at [B10b Carte Leaflet/OSM]'s end
+[B11b CRUD lieux + regles] lasts 1 days
+[B11b CRUD lieux + regles] starts at [B11a Client WebSocket alertes]'s end
+[B11c Profils, expositions, responsive, tests] lasts 1 days
+[B11c Profils, expositions, responsive, tests] starts at [B11b CRUD lieux + regles]'s end
+
+-- Jalon 4 - Finition v1.0 --
+[Durcissement post-audit (correctness, infra)] lasts 1 days
+[Durcissement post-audit (correctness, infra)] starts at [B11c Profils, expositions, responsive, tests]'s end
+[Vagues finition (perf, refactor, tokens)] lasts 1 days
+[Vagues finition (perf, refactor, tokens)] starts at [Durcissement post-audit (correctness, infra)]'s end
+[Recette, benchmarks, CI supply-chain] lasts 1 days
+[Recette, benchmarks, CI supply-chain] starts at [Vagues finition (perf, refactor, tokens)]'s end
+[Backfill alertes + captures preuves L4] lasts 1 days
+[Backfill alertes + captures preuves L4] starts at [Recette, benchmarks, CI supply-chain]'s end
+
+@endgantt

@@ -1,0 +1,43 @@
+@startuml
+title Creation d'un lieu suivi - POST /api/tracked-locations
+
+autonumber
+
+actor "Gestionnaire (navigateur)" as U
+participant "API axum (routes::tracked_locations::create)" as API
+participant "PostgreSQL" as PG
+participant "Procedure create_tracked_location_with_rules (P1)" as P1
+
+U -> API : POST /api/tracked-locations { name, openaq_location_ids[], rules[]? } (Bearer)
+activate API
+note over API : extracteur CanWrite : 403 read_only_role si can_write = false
+note over API : ValidatedJson valide name (1..200, non blanc), 1 a 50 stations, 50 regles max
+API -> PG : BEGIN (transaction)
+API -> PG : set_audit_actor(quarity.actor_user_id = user_id) (audit T5)
+API -> P1 : CALL create_tracked_location_with_rules(org_id, name, description, created_by, ids[], rules::jsonb)
+activate P1
+note over P1 : org_id et created_by viennent du JWT, jamais du corps (isolation)
+P1 -> PG : INSERT tracked_locations (nom unique dans l'org)
+P1 -> PG : resolution des stations contre ref_locations puis INSERT tracked_location_stations (1re = primaire)
+P1 -> PG : INSERT alert_rules optionnelles (declenche T2, T5)
+alt station inconnue ou en double
+    P1 --> API : erreur QRT_P1
+    API -> PG : ROLLBACK
+    API --> U : 422 unprocessable_entity (QRT_P1)
+else nom de lieu deja pris dans l'org
+    P1 --> API : violation unicite
+    API -> PG : ROLLBACK
+    API --> U : 409 conflict
+else succes
+    P1 --> API : p_tracked_location_id
+    deactivate P1
+    API -> PG : fetch_detail(org_id, new_id) (lieu + stations triees, primaire d'abord)
+    activate PG
+    PG --> API : TrackedLocationDetail
+    deactivate PG
+    API -> PG : COMMIT
+    API --> U : 201 Created { id, name, stations[], station_count, ... }
+end
+deactivate API
+
+@enduml

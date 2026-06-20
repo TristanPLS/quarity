@@ -1,0 +1,160 @@
+@startuml
+title Diagramme de classes des entites metier
+
+class Organisation {
+    +id : Long
+    +name : String
+    +slug : String
+    +deletedAt : DateTime
+}
+
+class Utilisateur {
+    +id : Long
+    +email : String
+    +displayName : String
+    +isActive : Boolean
+}
+
+class Role {
+    +id : Int
+    +code : String
+    +canWrite : Boolean
+}
+
+class Membership {
+    +id : Long
+    +orgId : Long
+    +userId : Long
+    +roleId : Int
+}
+
+class CleApi {
+    +id : Long
+    +name : String
+    +tokenPrefix : String
+    +tokenHash : String
+    +scope : String
+    +expiresAt : DateTime
+    +revokedAt : DateTime
+}
+
+class LieuSuivi {
+    +id : Long
+    +name : String
+    +description : String
+    +isActive : Boolean
+}
+
+class Station {
+    +id : Long
+    +openaqLocationId : Long
+    +name : String
+    +city : String
+    +country : String
+}
+
+class Capteur {
+    +id : Long
+    +openaqSensorId : Long
+}
+
+class Parametre {
+    +id : Int
+    +code : String
+    +unit : String
+}
+
+class AssociationLieuStation {
+    +id : Long
+    +isPrimary : Boolean
+}
+
+class RegleAlerte {
+    +id : Long
+    +orgId : Long
+    +comparator : String
+    +thresholdValue : Double
+    +severity : String
+    +status : String
+    +name : String
+}
+
+class EvenementAlerte {
+    +id : Long
+    +orgId : Long
+    +openaqLocationId : Long
+    +openaqSensorId : Long
+    +parameterCode : String
+    +measuredValue : Double
+    +unit : String
+    +measuredAt : DateTime
+    +thresholdValue : Double
+    +comparator : String
+    +severity : String
+    +isRead : Boolean
+    +firedAt : DateTime
+}
+
+class ProfilExposition {
+    +id : Long
+    +orgId : Long
+    +code : String
+    +name : String
+    +isSystem : Boolean
+}
+
+class SeuilExposition {
+    +id : Long
+    +thresholdValue : Double
+    +averagingPeriod : String
+}
+
+class AssociationLieuProfil {
+    +id : Long
+    +startTime : Time
+    +endTime : Time
+    +daysMask : Short
+    +timezone : String
+    +isActive : Boolean
+}
+
+class ResultatExposition {
+    +id : Long
+    +averagingPeriod : String
+    +thresholdValue : Double
+    +exceedanceHours : Double
+    +windowStart : DateTime
+    +windowEnd : DateTime
+}
+
+Organisation "1" --> "*" Membership : compte
+Utilisateur "1" --> "*" Membership : appartient
+Role "1" --> "*" Membership : qualifie
+
+Organisation "1" --> "*" CleApi : emet
+Utilisateur "0..1" --> "*" CleApi : cree
+
+Organisation "1" --> "*" LieuSuivi : definit
+Organisation "1" --> "*" RegleAlerte : possede
+Organisation "1" --> "*" EvenementAlerte : possede
+Organisation "0..1" --> "*" ProfilExposition : possede
+
+Station "1" --> "1..*" Capteur : heberge
+Parametre "1" --> "*" Capteur : mesure
+
+LieuSuivi "1" --> "1..*" AssociationLieuStation : agrege
+Station "1" --> "*" AssociationLieuStation : rattachee
+
+LieuSuivi "1" --> "*" RegleAlerte : porte
+Parametre "1" --> "*" RegleAlerte : cible
+RegleAlerte "0..1" --> "*" EvenementAlerte : declenche
+
+ProfilExposition "1" --> "*" SeuilExposition : fixe
+Parametre "1" --> "*" SeuilExposition : par polluant
+
+LieuSuivi "1" --> "*" AssociationLieuProfil : applique
+ProfilExposition "1" --> "*" AssociationLieuProfil : instancie
+AssociationLieuProfil "1" --> "*" ResultatExposition : produit
+Parametre "1" --> "*" ResultatExposition : pour polluant
+
+@enduml

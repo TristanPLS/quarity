@@ -1,0 +1,28 @@
+@startuml
+title UC - etat pre-sequence (ingestion OpenAQ : liaison a creer)
+
+object "stationOpenAQ : StationOpenAQ" as stationOpenAQ {
+  location_id = 4085
+  name = "NICE PROMENADE"
+  country = "FR"
+  capteurs = "pm25, no2, o3, ..."
+}
+
+object "orgCible : Organisation" as orgCible {
+  slug = "agglo-riviera"
+  statut = "presente (seed)"
+}
+
+object "refLocation : RefLocation" as refLocation {
+  statut = "absente"
+}
+
+object "mesuresCH : SerieClickHouse" as mesuresCH {
+  location_id = 4085
+  statut = "aucune mesure ingeree"
+}
+
+stationOpenAQ --> mesuresCH : a ingerer
+orgCible --> refLocation : liaison a creer
+
+@enduml

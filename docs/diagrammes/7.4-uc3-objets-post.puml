@@ -1,0 +1,31 @@
+@startuml
+title UC3 - etat post-sequence (apres creation de la regle)
+
+object "regle : alert_rules (PostgreSQL)" as regle_creee {
+  id = nouveau
+  org_id = 42
+  tracked_location_id = 7 (immuable)
+  parameter_id = pm25 (immuable)
+  comparator = ">"
+  threshold_value = 15.0000
+  severity = warning puis valeur PATCH
+  status = active
+}
+
+object "audit_log : T5" as journal_audit {
+  creation = action create
+  edition = action update ou activate/deactivate
+}
+
+object "index : boucle de matching" as index_matching {
+  etat = regle prise en compte au tick suivant l'expiration du cache Moka (TTL court)
+}
+
+object "gestionnaire : Navigateur" as gestionnaire_navigateur {
+  etat = regle (201) ou regle modifiee (200) recue
+}
+
+regle_creee --> journal_audit : trace l'action dans
+regle_creee --> index_matching : prise en compte par
+gestionnaire_navigateur --> regle_creee : recoit (201/200)
+@enduml

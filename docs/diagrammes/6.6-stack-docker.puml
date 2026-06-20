@@ -1,0 +1,38 @@
+@startuml
+title Stack docker-compose
+
+actor "Hote (loopback 127.0.0.1 - dev only)" as host127
+actor "Hote (ports publies)" as hostpub
+
+package "Reseau interne Compose (resolution par nom de service)" {
+  node "front (nginx-unprivileged)\nstatique + proxy /api" as front
+  node "back (Rust / Axum)\nJWT, matching, WebSocket /api/ws" as back
+  node "ingest-scheduler\ningestion OpenAQ horaire" as sched
+  database "postgres:16-alpine\nOLTP metier\nmem 1g" as pg
+  database "clickhouse 24.8.14.39-alpine\nseries temporelles\nmem 4g" as ch
+  database "redis:7-alpine\nrefresh tokens, pub/sub, quotas\nmem 512m" as rd
+
+  artifact "volume pgdata" as volpg
+  artifact "volume clickhouse_data" as volch
+  artifact "volume redis_data" as volrd
+}
+
+front --> back : depends_on: service_healthy
+back --> pg : depends_on: service_healthy
+back --> ch : depends_on: service_healthy
+back --> rd : depends_on: service_healthy
+sched --> pg : depends_on: service_healthy
+sched --> ch : depends_on: service_healthy
+sched --> back : depends_on: service_healthy
+
+pg -- volpg
+ch -- volch
+rd -- volrd
+
+host127 ..> pg : 5432 / 8123 / 9000 / 6379
+host127 ..> ch
+host127 ..> rd
+hostpub ..> front : 3000 -> front:8080
+hostpub ..> back : 8080 -> back:8080
+
+@enduml

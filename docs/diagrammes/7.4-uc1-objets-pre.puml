@@ -1,0 +1,27 @@
+@startuml
+title UC1 - etat pre-sequence (avant authentification)
+
+object "utilisateur : Navigateur" as utilisateur_navigateur {
+  etat = non authentifie
+  access_token = absent
+  refresh_token = absent
+}
+
+object "users : PostgreSQL" as compte_pg {
+  email = sophie@agglo-riviera.fr
+  password_hash = $argon2id$...
+  is_active = true
+  org_id = 42
+  role_code = gestionnaire
+  can_write = true
+}
+
+object "compteurs : Redis" as compteur_redis {
+  ratelimit_login_email = absent ou sous le seuil
+  ratelimit_login_ip = absent ou sous le seuil
+  refresh_token = aucun pour cette session
+}
+
+utilisateur_navigateur --> compte_pg : tente de s'authentifier
+utilisateur_navigateur --> compteur_redis : verifie les compteurs
+@enduml

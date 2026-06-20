@@ -1,0 +1,33 @@
+@startuml
+title UC - etat pre-sequence (consultation AQI d'un lieu)
+
+object "sessionFront : SessionFront" as sessionFront {
+  accessToken = "JWT valide"
+  overview = null
+}
+
+object "tlCentre : TrackedLocation" as tlCentre {
+  id = 1
+  org_id = 7
+  name = "Ecoles du centre-ville"
+  is_active = true
+}
+
+object "stationA : RefLocation" as stationA {
+  ref_location_id = 11
+  openaq_location_id = 1001
+  latitude = 43.70
+  longitude = 7.26
+}
+
+object "mesuresCH : SerieClickHouse" as mesuresCH {
+  location_id = 1001
+  parameter = "pm25"
+  statut = "mesures recentes presentes"
+}
+
+sessionFront --> tlCentre : consulte (org 7)
+tlCentre "1" --> "1..*" stationA : tracked_location_stations
+stationA --> mesuresCH : series ClickHouse
+
+@enduml
