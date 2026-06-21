@@ -1,0 +1,23 @@
+:
+Concerner, 0N Parametre, 11 Seuil exposition
+Parametre: id_param, code, unite
+Pour polluant, 0N Parametre, 11 Resultat dose
+:
+
+:
+Seuil exposition: id_seuil, valeur, periode
+Fixer, 1N Profil exposition, 11 Seuil exposition
+Resultat dose: id_resultat, periode, debut, fin, heures_depassement, nb_echantillons
+:
+
+Organisation: id_org, nom
+Posseder profil, 0N Organisation, 01 Profil exposition
+Profil exposition: id_profil, code, systeme
+Produire, 11 Exposition, 0N Resultat dose
+Lieu suivi: id_lieu, nom
+
+:
+:
+Selon profil, 0N Profil exposition, 11 Exposition
+Exposition: id_expo, heure_debut, heure_fin, jours_actifs, fuseau, actif
+Concerner lieu, 0N Lieu suivi, 11 Exposition

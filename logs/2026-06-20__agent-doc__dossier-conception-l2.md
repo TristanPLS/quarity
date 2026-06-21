@@ -39,3 +39,12 @@
 - **Pas de moteur PlantUML local** (Java 1.8 present mais pas de plantuml.jar) : pas de rendu PNG produit ; Tristan rend les .puml via l'extension VS Code PlantUML, plantuml.jar ou le serveur public (cf. `docs/diagrammes/README.md`).
 - **Fichiers touches** : `docs/dossier-conception.md` (Mermaid -> PlantUML, sauf MCD), `docs/diagrammes/*.puml` (30) + `docs/diagrammes/README.md` (crees).
 - **Reste pour Tristan** : produire le **MCD Merise en losanges** (Looping/JMerise/draw.io), rendre les .puml en images (SVG conseille), inserer dans le PDF, + finalisation (PDF, ToC/ToF, page de garde).
+
+## CEST (06-21) - MCD Merise produit (Mocodo) + rendus
+
+- **Contexte** : Tristan a installe PlantUML (rendu des 30 .puml en SVG, OK) puis demande de l'aide pour le MCD Merise.
+- **MCD** : genere avec **Mocodo 4.3.3** (pip), converti SVG->PNG via **cairosvg**. Le MCD complet (18 entites, ~25 assoc) est **non planaire** (`Err.41`) -> presente en **4 vues par domaine** (identite/acces, donnees de reference, lieux/regles/alertes, exposition/doses), chacune mise en page proprement via `--transform arrange` et verifiee visuellement. Entites-pivots (Organisation, Parametre, Lieu suivi) repetees entre vues.
+- **Livre** : `docs/diagrammes/mcd/` = 4 x {.mcd, .svg, .png} + `quarity-mcd-complet.mocodo` (source unifiee) + `README.md`. Ternaire `Adherer` (memberships) et entite reifiee `Exposition` (tracked_location_profiles) correctement modelisees.
+- **Forme** : Mocodo dessine les associations en rectangles arrondis (convention academique FR), pas en losanges stricts ; note dans le README (redessiner en draw.io si losanges exiges).
+- **Cablage FAIT** : section 7.3 (a) du dossier remplacee par les 4 figures MCD (Figure 7.3.a.1 a .4) avec legendes conservees (ternaire `memberships`, index partiels, fait fige `alert_events`, entite reifiee `Exposition`). Les 2 blocs Mermaid MCD supprimes -> **le dossier n'a plus aucun bloc Mermaid** (100% PlantUML + images). Diff vs origin/dev : -157/+38 lignes (cible).
+- **Etat git** : dossier merge en `#85` (`d03304a` sur origin/dev). Commit de suivi PREPARE : `quarity/commit-docs-diagrammes-rendus-mcd.cmd` (branche `docs/diagrammes-rendus-mcd` depuis origin/dev ; stage = dossier modifie + 30 SVG PlantUML + `docs/diagrammes/mcd/` + ce log). A executer par Tristan.

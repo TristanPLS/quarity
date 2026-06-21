@@ -751,166 +751,47 @@ Le modèle suit Merise : un MCD (entités et associations en cardinalités min/m
 
 #### (a) MCD au sens Merise
 
-Le MCD est scindé en deux figures (tenant/RBAC/facturation/API ; référentiel air/métier/alerting/exposition). Les associations porteuses de propriétés et les n-aires sont des entités-association `<<association>>` ; cardinalités au format Merise `min,max`.
+Le MCD complet (18 entités, environ 25 associations) forme un graphe non planaire : les entités-pivots (Organisation, Paramètre, Lieu suivi) relient l'ensemble des domaines, si bien qu'aucune disposition sans croisement de boîtes n'existe. Il est donc présenté en quatre vues thématiques cohérentes ; les entités partagées réapparaissent d'une vue à l'autre, ce qui est volontaire. Les sources et images sont dans `docs/diagrammes/mcd/` (générées avec Mocodo). Les associations porteuses de propriétés et les associations n-aires sont des entités-association ; cardinalités au format Merise `min,max`.
 
-Figure 7.1 - MCD, sous-domaine Tenant, RBAC, facturation et API.
+![MCD - Identité et accès](diagrammes/mcd/1-identite-acces.png)
 
-> **[A PRODUIRE - MCD Merise]** Ce modele conceptuel est a realiser en notation Merise (entites + associations en losanges, cardinalites (0,n)/(1,1)) avec un outil dedie (Looping, JMerise ou draw.io). Sa traduction relationnelle complete figure dans le MLD (section 7.3 (b)). Le schema crow's-foot equivalent est conserve ci-dessous a titre de reference.
+*Figure 7.3.a.1 - MCD, domaine Identité et accès (Organisation, Utilisateur, Rôle, Plan, Clé API).*
 
-```mermaid
-erDiagram
-    ORGANIZATIONS {
-        bigint id PK
-        citext slug UK
-        text name
-    }
-    USERS {
-        bigint id PK
-        citext email UK
-        text password_hash
-    }
-    ROLES {
-        int id PK
-        text code UK
-    }
-    SUBSCRIPTION_PLANS {
-        int id PK
-        text code UK
-    }
-    API_TOKENS {
-        bigint id PK
-        text token_hash UK
-    }
+Légende :
 
-    MEMBERSHIPS_assoc {
-        bigint id PK
-        bigint org_id
-        bigint user_id
-        int role_id
-    }
-    ORGANIZATION_SUBSCRIPTIONS_assoc {
-        bigint id PK
-        text status
-    }
+- `Adhérer` est une association **ternaire** entre Utilisateur, Organisation et Rôle (table `memberships`) : chaque occurrence référence exactement une organisation, un utilisateur et un rôle. `uq_membership_user_org UNIQUE (org_id, user_id)` impose un seul rôle par couple (utilisateur, organisation).
+- `Souscrire` porte `statut` ; l'index unique partiel `uq_org_active_subscription ON (org_id) WHERE statut = 'active'` garantit au plus un abonnement actif par organisation, tout en conservant l'historique.
+- `Clé API` est rattachée obligatoirement à une organisation (1,1) et facultativement à son créateur (`created_by` nullable, `ON DELETE SET NULL`, 0,1).
 
-    ORGANIZATIONS ||--o{ MEMBERSHIPS_assoc : "compte (1,1)-(0,n)"
-    USERS ||--o{ MEMBERSHIPS_assoc : "appartient (1,1)-(0,n)"
-    ROLES ||--o{ MEMBERSHIPS_assoc : "qualifie (1,1)-(0,n)"
-    ORGANIZATIONS ||--o{ ORGANIZATION_SUBSCRIPTIONS_assoc : "souscrit (1,1)-(0,n)"
-    SUBSCRIPTION_PLANS ||--o{ ORGANIZATION_SUBSCRIPTIONS_assoc : "instancie (1,1)-(0,n)"
-    ORGANIZATIONS ||--o{ API_TOKENS : "emet (1,1)-(0,n)"
-    USERS |o--o{ API_TOKENS : "cree (0,1)-(0,n)"
-```
+![MCD - Données de référence](diagrammes/mcd/2-donnees-reference.png)
 
-Légende (Figure 7.1) :
+*Figure 7.3.a.2 - MCD, domaine Données de référence sur la qualité de l'air (Paramètre, Station, Capteur, Catégorie AQI, Palier AQI).*
 
-- `MEMBERSHIPS_assoc` : ternaire entre `users`, `organizations`, `roles` ; chaque ligne référence exactement une organisation, un utilisateur, un rôle (`org_id`, `user_id`, `role_id` tous `NOT NULL`). `uq_membership_user_org UNIQUE (org_id, user_id)` impose un seul rôle par couple (utilisateur, organisation) ; `role_id` hors de la clé d'unicité interdit deux rôles pour un même couple.
-- `ORGANIZATION_SUBSCRIPTIONS_assoc` : porte `status`, associe une organisation à un plan. L'index unique partiel `uq_org_active_subscription ON (org_id) WHERE status = 'active'` garantit au plus un abonnement actif par organisation, tout en conservant les historiques (`canceled`).
-- `api_tokens` : rattaché obligatoirement à une organisation (`org_id NOT NULL`, 1,1 côté token), facultativement à l'utilisateur créateur (`created_by` nullable, `ON DELETE SET NULL`, 0,1).
+Légende :
 
-Figure 7.2 - MCD, sous-domaine Référentiel air, métier, alerting et exposition.
+- Un `Capteur` appartient à exactement une `Station` (1,1) et mesure exactement un `Paramètre` (1,1).
+- Un `Palier AQI` est défini pour un `Paramètre` et une `Catégorie AQI` ; les paliers EPA constituent le référentiel de calcul de l'indice de qualité de l'air.
 
-> **[A PRODUIRE - MCD Merise]** Ce modele conceptuel est a realiser en notation Merise (entites + associations en losanges, cardinalites (0,n)/(1,1)) avec un outil dedie (Looping, JMerise ou draw.io). Sa traduction relationnelle complete figure dans le MLD (section 7.3 (b)). Le schema crow's-foot equivalent est conserve ci-dessous a titre de reference.
+![MCD - Lieux suivis, règles et alertes](diagrammes/mcd/3-lieux-regles-alertes.png)
 
-```mermaid
-erDiagram
-    PARAMETERS {
-        int id PK
-        text code UK
-        text unit
-    }
-    REF_LOCATIONS {
-        bigint id PK
-        bigint openaq_location_id UK
-    }
-    REF_SENSORS {
-        bigint id PK
-        bigint openaq_sensor_id UK
-    }
-    AQI_CATEGORIES {
-        smallint category PK
-    }
-    AQI_BREAKPOINTS {
-        int id PK
-    }
-    ORGANIZATIONS {
-        bigint id PK
-    }
-    TRACKED_LOCATIONS {
-        bigint id PK
-    }
-    ALERT_RULES {
-        bigint id PK
-    }
-    ALERT_EVENTS {
-        bigint id PK
-    }
-    NOTIFICATION_DELIVERIES {
-        bigint id PK
-    }
-    EXPOSURE_PROFILES {
-        bigint id PK
-        bigint org_id
-        boolean is_system
-    }
-    EXPOSURE_THRESHOLDS {
-        bigint id PK
-    }
-    EXPOSURE_RESULTS {
-        bigint id PK
-    }
-    USERS {
-        bigint id PK
-    }
+*Figure 7.3.a.3 - MCD, domaine Lieux suivis, règles d'alerte et événements.*
 
-    TRACKED_LOCATION_STATIONS_assoc {
-        bigint id PK
-        boolean is_primary
-    }
-    ALERT_RULE_RECIPIENTS_assoc {
-        bigint id PK
-        text channel
-    }
-    TRACKED_LOCATION_PROFILES_assoc {
-        bigint id PK
-        time start_time
-        smallint days_mask
-    }
+Légende :
 
-    REF_LOCATIONS ||--o{ REF_SENSORS : "heberge (1,1)-(0,n)"
-    PARAMETERS ||--o{ REF_SENSORS : "mesure (1,1)-(0,n)"
-    PARAMETERS ||--o{ AQI_BREAKPOINTS : "definit-paliers (1,1)-(0,n)"
-    AQI_CATEGORIES ||--o{ AQI_BREAKPOINTS : "classe (1,1)-(0,n)"
+- `Rattacher` (n-n entre Lieu suivi et Station) porte `principale` ; l'index unique partiel `uq_tls_primary ON (tracked_location_id) WHERE is_primary` garantit au plus une station primaire par lieu, et `uq_tls UNIQUE (tracked_location_id, ref_location_id)` interdit le doublon de station.
+- `Destinataire` porte `canal` ; la cible est un utilisateur interne, une adresse e-mail ou une URL de webhook selon `chk_recipient_one_target CHECK (num_nonnulls(user_id, email, webhook_url) = 1)` : exactement une cible non nulle. La patte vers Utilisateur est donc en 0,1.
+- `Événement alerte` est un **fait figé** : sa patte vers `Règle alerte` est en 0,1 (`alert_rule_id` nullable, `ON DELETE SET NULL`), de même vers Lieu suivi (0,1), tandis que `org_id` est `NOT NULL` (1,1, `ON DELETE RESTRICT`). L'événement survit ainsi à la suppression de la règle ou du lieu déclencheur, mais reste rattaché à son organisation.
 
-    ORGANIZATIONS ||--o{ TRACKED_LOCATIONS : "definit (1,1)-(0,n)"
-    TRACKED_LOCATIONS ||--o{ TRACKED_LOCATION_STATIONS_assoc : "agrege (1,1)-(0,n)"
-    REF_LOCATIONS ||--o{ TRACKED_LOCATION_STATIONS_assoc : "rattachee (1,1)-(0,n)"
+![MCD - Profils d'exposition et doses](diagrammes/mcd/4-exposition-doses.png)
 
-    ORGANIZATIONS ||--o{ ALERT_RULES : "possede (1,1)-(0,n)"
-    TRACKED_LOCATIONS ||--o{ ALERT_RULES : "porte (1,1)-(0,n)"
-    PARAMETERS ||--o{ ALERT_RULES : "cible (1,1)-(0,n)"
-    ALERT_RULES ||--o{ ALERT_RULE_RECIPIENTS_assoc : "notifie (1,1)-(0,n)"
-    USERS |o--o{ ALERT_RULE_RECIPIENTS_assoc : "destinataire (0,1)-(0,n)"
+*Figure 7.3.a.4 - MCD, domaine Profils d'exposition et calcul de dose.*
 
-    ALERT_RULES |o--o{ ALERT_EVENTS : "declenche (0,1)-(0,n)"
-    ORGANIZATIONS ||--o{ ALERT_EVENTS : "impute (1,1)-(0,n)"
-    TRACKED_LOCATIONS |o--o{ ALERT_EVENTS : "localise (0,1)-(0,n)"
-    ALERT_EVENTS ||--o{ NOTIFICATION_DELIVERIES : "envoie (1,1)-(0,n)"
+Légende :
 
-    EXPOSURE_PROFILES ||--o{ EXPOSURE_THRESHOLDS : "fixe-seuils (1,1)-(0,n)"
-    PARAMETERS ||--o{ EXPOSURE_THRESHOLDS : "par-polluant (1,1)-(0,n)"
-    TRACKED_LOCATIONS ||--o{ TRACKED_LOCATION_PROFILES_assoc : "applique (1,1)-(0,n)"
-    EXPOSURE_PROFILES ||--o{ TRACKED_LOCATION_PROFILES_assoc : "instancie (1,1)-(0,n)"
-    TRACKED_LOCATION_PROFILES_assoc ||--o{ EXPOSURE_RESULTS : "produit-dose (1,1)-(0,n)"
-    PARAMETERS ||--o{ EXPOSURE_RESULTS : "pour-polluant (1,1)-(0,n)"
-```
+- `Exposition` est une **entité réifiée** (table `tracked_location_profiles`) : l'association lieu x profil porte la plage d'exposition (`heure_debut`, `heure_fin`, `jours_actifs` [bitmask de jours], `fuseau`) et **produit** des résultats de dose. Comme une association Merise ne peut pas être reliée à une autre entité, on la réifie en entité. `uq_tlp UNIQUE (tracked_location_id, exposure_profile_id)` impose une seule plage par couple (lieu, profil).
+- `Profil exposition` est rattaché à une organisation (0,1) ou est un profil système (sans organisation) ; il fixe un ou plusieurs `Seuil exposition`, chacun portant sur un `Paramètre`.
 
-Légende (Figure 7.2) :
-
-- `TRACKED_LOCATION_STATIONS_assoc` : n-n entre un lieu suivi et les stations OpenAQ qu'il agrège. `uq_tls UNIQUE (tracked_location_id, ref_location_id)` interdit le doublon de station dans un lieu. La propriété `is_primary` (booléen) est portée par l'association ; l'index unique partiel `uq_tls_primary ON (tracked_location_id) WHERE is_primary` garantit au plus une station primaire par lieu.
-- `ALERT_RULE_RECIPIENTS_assoc` : porte `channel`. La cible est un utilisateur interne (`user_id`), une adresse externe (`email`) ou une URL (`webhook_url`), selon `chk_recipient_one_target CHECK (num_nonnulls(user_id, email, webhook_url) = 1)` : exactement une cible non nulle. La patte vers `users` est donc en 0,1 (destinataire potentiellement externe).
-- `TRACKED_LOCATION_PROFILES_assoc` : n-aire lieu x profil portant la plage d'exposition (`start_time`, `end_time`, `days_mask` [bitmask de jours], `timezone`). `uq_tlp UNIQUE (tracked_location_id, exposure_profile_id)` impose une seule plage par couple (lieu, profil).
-- `alert_events` : patte vers `alert_rules` en 0,1 (`alert_rule_id` nullable, `ON DELETE SET NULL`), vers `tracked_locations` aussi 0,1, tandis que `org_id` est `NOT NULL` (1,1, `ON DELETE RESTRICT`). Cette asymétrie traduit le fait figé : l'événement survit à la suppression de la règle ou du lieu déclencheur, mais reste rattaché à son organisation.
+> Note de notation : les figures sont produites avec Mocodo, qui dessine les associations en rectangles arrondis (convention académique française du losange Merise). Le contenu (entités, associations, cardinalités) est strictement conforme au schéma relationnel détaillé en (b).
 
 #### (b) MLD - notation crow's-foot
 
